@@ -18,6 +18,10 @@ import { composeHtmlEmail, composePlainEmail } from "@/lib/email-signature";
 /** {{field_name}} — letters, digits and underscores only. */
 const MERGE_TOKEN = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
 
+/** ![alt](https://example.com/img.png) — matched before links, because
+ *  the link pattern would otherwise swallow the same text. */
+const MARKDOWN_IMAGE = /!\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g;
+
 /** [label](https://example.com) */
 const MARKDOWN_LINK = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
 
@@ -83,14 +87,73 @@ const FOOTER_STYLE =
 function extractLinks(body: string): {
   masked: string;
   links: Array<{ label: string; url: string }>;
+  images: Array<{ alt: string; url: string }>;
 } {
   const links: Array<{ label: string; url: string }> = [];
-  const masked = body.replace(MARKDOWN_LINK, (_match, label: string, url: string) => {
+  const images: Array<{ alt: string; url: string }> = [];
+
+  /* Images first. `![alt](url)` also matches the link pattern, so
+     extracting links first would turn every image into an anchor
+     labelled "!alt". */
+  let masked = body.replace(MARKDOWN_IMAGE, (_match, alt: string, url: string) => {
+    const index = images.length;
+    images.push({ alt, url });
+    return `@@MFIMG${index}@@`;
+  });
+
+  masked = masked.replace(MARKDOWN_LINK, (_match, label: string, url: string) => {
     const index = links.length;
     links.push({ label, url });
     return `@@MFLINK${index}@@`;
   });
-  return { masked, links };
+
+  return { masked, links, images };
+}
+
+/**
+ * Put the images back as <img> tags.
+ *
+ * `max-width:100%` and `height:auto` because a fixed width is how an
+ * email ends up sideways-scrolling on a phone, and Outlook ignores CSS
+ * it does not recognise — so the width attribute carries the same
+ * intent for clients that only read attributes.
+ *
+ * The URL is not click-wrapped. Tracking redirects belong on links a
+ * person chooses to follow; putting one on an image would count the
+ * mail client's own fetch as a click and make the click rate a lie.
+ */
+function restoreImagesHtml(
+  html: string,
+  images: Array<{ alt: string; url: string }>,
+): string {
+  return html.replace(/@@MFIMG(\d+)@@/g, (match, raw: string) => {
+    const image = images[Number(raw)];
+    if (!image) return match;
+    const src = escapeHtml(image.url);
+    const alt = escapeHtml(image.alt);
+    return (
+      `<img src="${src}" alt="${alt}" width="560" ` +
+      `style="max-width:100%;height:auto;display:block;border:0;margin:18px 0;">`
+    );
+  });
+}
+
+/**
+ * And in plain text, where there is no image to show.
+ *
+ * The alt text stands in for it. An image with no alt text leaves
+ * nothing at all, which is better than a bare URL a reader cannot use
+ * — they are reading the text part precisely because images are off.
+ */
+function restoreImagesText(
+  text: string,
+  images: Array<{ alt: string; url: string }>,
+): string {
+  return text.replace(/@@MFIMG(\d+)@@/g, (match, raw: string) => {
+    const image = images[Number(raw)];
+    if (!image) return match;
+    return image.alt.trim() ? `[${image.alt.trim()}]` : "";
+  });
 }
 
 function restoreLinksHtml(
@@ -196,7 +259,7 @@ export interface RenderedCampaign {
 export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
   const subject = applyMergeFields(input.subject, input.fields).trim();
   const mergedBody = applyMergeFields(input.body, input.fields);
-  const { masked, links } = extractLinks(mergedBody);
+  const { masked, links, images } = extractLinks(mergedBody);
   const wrapUrl = input.links.wrapUrl ?? ((url: string) => url);
 
   const bodyHtml = composeHtmlEmail({
@@ -208,7 +271,7 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
   });
 
   const parts = [
-    restoreLinksHtml(bodyHtml, links, wrapUrl),
+    restoreImagesHtml(restoreLinksHtml(bodyHtml, links, wrapUrl), images),
     unsubscribeFooterHtml(input.links.unsubscribeUrl, input.postalAddress),
   ];
   if (input.links.openPixelUrl) {
@@ -227,7 +290,7 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
     subject,
     html: parts.join("\n"),
     text: [
-      restoreLinksText(bodyText, links),
+      restoreImagesText(restoreLinksText(bodyText, links), images),
       "",
       unsubscribeFooterText(input.links.unsubscribeUrl, input.postalAddress),
     ].join("\n"),

@@ -1453,3 +1453,62 @@ export const SETTINGS_ROW_ID = "mailflow";
 
 export type MailflowSettingsRow = typeof mailflowSettings.$inferSelect;
 export type NewMailflowSettings = typeof mailflowSettings.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* media_files — images a campaign can use                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * An uploaded image.
+ *
+ * The bytes live in Postgres, base64 in a text column, and are served
+ * from /api/files/<id>. That is not where a large media library
+ * belongs — object storage is — but it is the right call at this size
+ * and worth stating why:
+ *
+ * An image in an email must be fetchable by a mail client with no
+ * credentials, from any network, for as long as the email exists in
+ * someone's inbox. A SharePoint link is not that; a signed URL is not
+ * that either, because it expires while the email does not. So the
+ * options were a public object-storage bucket — a new service, a new
+ * credential, a new thing to get wrong — or the database already in
+ * use. At a few brand images and a 2 MB ceiling, the database wins on
+ * every count except purity.
+ *
+ * The move to object storage becomes worth making when the library
+ * runs to hundreds of files or someone uploads video. Until then this
+ * has one fewer moving part, and the serve route is the only thing
+ * that would need to change.
+ */
+export const mediaFiles = pgTable(
+  "media_files",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+
+    /** Original filename, for the broker to recognise it by. */
+    name: text("name").notNull(),
+    /** Validated against an allow-list on upload — never trusted from
+     *  the client, because it becomes a Content-Type response header. */
+    contentType: text("content_type").notNull(),
+    /** Decoded size in bytes. */
+    size: integer("size").notNull(),
+    /** Base64 payload. ~33% larger than the file itself. */
+    data: text("data").notNull(),
+
+    /**
+     * Alt text, for the reader whose client blocks images — which on a
+     * cold send is most of them. An image with no alt text is a blank
+     * rectangle where the point of the email was.
+     */
+    altText: text("alt_text").notNull().default(""),
+
+    uploadedBy: text("uploaded_by").notNull(),
+  },
+  (t) => [index("media_files_created_at_idx").on(t.createdAt)],
+);
+
+export type MediaFileRow = typeof mediaFiles.$inferSelect;
+export type NewMediaFile = typeof mediaFiles.$inferInsert;

@@ -58,7 +58,7 @@ const NAV: NavEntry[] = [
   { key: "forms", label: "Forms", href: "/marketing/forms", icon: ClipboardList },
   { key: "landing-pages", label: "Landing pages", href: "/marketing/landing-pages", icon: PanelsTopLeft },
   { key: "templates", label: "Templates", href: "/marketing/templates", icon: LayoutTemplate },
-  { key: "files", label: "File manager", href: "/marketing/files", icon: FolderOpen, planned: true },
+  { key: "files", label: "File manager", href: "/marketing/files", icon: FolderOpen },
   { key: "integrations", label: "Integrations", href: "/marketing/integrations", icon: Plug, planned: true },
   { key: "settings", label: "Settings", href: "/marketing/settings", icon: Settings },
 ];

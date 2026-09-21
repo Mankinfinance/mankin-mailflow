@@ -157,3 +157,83 @@ describe("unsubscribeFooterHtml", () => {
     expect(html).not.toContain("Mankin Finance Pty Ltd,");
   });
 });
+
+describe("images in a campaign body", () => {
+  function render(body: string) {
+    return renderCampaign({
+      subject: "Subject",
+      body,
+      fields: { first_name: "Sarah" },
+      brokerId: "mm",
+      links: {
+        unsubscribeUrl: "https://app.example.com/e/u/tok",
+        wrapUrl: (u) => `https://app.example.com/e/c/tok?u=${encodeURIComponent(u)}`,
+      },
+    });
+  }
+
+  const IMG = "https://app.example.com/api/files/abc-123";
+
+  it("renders an image as an img tag", () => {
+    const { html } = render(`Hi,\n\n![Our new rates](${IMG})`);
+    expect(html).toContain(`<img src="${IMG}"`);
+    expect(html).toContain('alt="Our new rates"');
+  });
+
+  it("keeps the image inside the width of a phone screen", () => {
+    // A fixed width is how an email ends up sideways-scrolling.
+    const { html } = render(`![Logo](${IMG})`);
+    expect(html).toContain("max-width:100%");
+    expect(html).toContain("height:auto");
+    // Outlook reads the attribute, not the CSS.
+    expect(html).toContain('width="560"');
+  });
+
+  it("does not click-wrap an image", () => {
+    // The mail client fetches an image without the reader doing
+    // anything. Counting that as a click would make the click rate a
+    // lie.
+    const { html } = render(`![Logo](${IMG})`);
+    expect(html).toContain(`src="${IMG}"`);
+    expect(html).not.toContain(`/e/c/tok?u=${encodeURIComponent(IMG)}`);
+  });
+
+  it("still click-wraps ordinary links alongside an image", () => {
+    const { html } = render(`![Logo](${IMG})\n\n[Book a time](https://tidycal.com/x)`);
+    expect(html).toContain("/e/c/tok?u=");
+    expect(html).toContain("Book a time");
+  });
+
+  it("does not turn an image into a link labelled !alt", () => {
+    // The link pattern matches the same text, so images have to be
+    // extracted first.
+    const { html } = render(`![Our rates](${IMG})`);
+    expect(html).not.toContain(">!Our rates<");
+    expect(html).not.toContain(`<a href="${IMG}"`);
+  });
+
+  it("stands the alt text in for the image in the plain-text part", () => {
+    // Someone reading the text part has images off — a bare URL would
+    // be no use to them.
+    const { text } = render(`![Our new rates](${IMG})`);
+    expect(text).toContain("[Our new rates]");
+    expect(text).not.toContain(IMG);
+  });
+
+  it("leaves nothing in the text part when there is no alt text", () => {
+    const { text } = render(`Hi,\n\n![](${IMG})\n\nRegards`);
+    expect(text).not.toContain(IMG);
+    expect(text).not.toContain("[]");
+  });
+
+  it("escapes a hostile alt text rather than letting it become markup", () => {
+    const { html } = render(`![" onerror="alert(1)](${IMG})`);
+    expect(html).not.toContain('onerror="alert(1)"');
+    expect(html).toContain("&quot;");
+  });
+
+  it("merges fields inside an alt text", () => {
+    const { html } = render(`![Rates for {{first_name}}](${IMG})`);
+    expect(html).toContain('alt="Rates for Sarah"');
+  });
+});

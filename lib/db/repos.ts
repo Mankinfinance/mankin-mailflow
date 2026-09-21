@@ -32,6 +32,7 @@ import {
   contactTags,
   audienceSegments,
   mailflowSettings,
+  mediaFiles,
   SETTINGS_ROW_ID,
   type ActivityRow,
   type AuditLogRow,
@@ -81,6 +82,8 @@ import {
   type ContactTagRow,
   type AudienceSegmentRow,
   type MailflowSettingsRow,
+  type MediaFileRow,
+  type NewMediaFile,
   type NewAudienceSegment,
 } from "./schema";
 import type { Deal } from "@/lib/clients/salestrekker/types";
@@ -522,6 +525,27 @@ export interface MailflowSettingsRepo {
   save(settings: unknown, updatedBy: string): Promise<void>;
 }
 
+/** A file without its bytes — what a listing needs. */
+export type MediaFileSummary = Omit<MediaFileRow, "data">;
+
+export interface MediaFileRepo {
+  /**
+   * Every file, newest first, WITHOUT the payload.
+   *
+   * The bytes are deliberately absent: a gallery of twenty 2 MB images
+   * would otherwise pull 40 MB into a server render to show twenty
+   * thumbnails. Only the serve route reads `data`, one row at a time.
+   */
+  list(): Promise<MediaFileSummary[]>;
+  /** One file with its bytes. Used only by the public serve route. */
+  get(id: string): Promise<MediaFileRow | null>;
+  create(row: NewMediaFile): Promise<MediaFileSummary>;
+  update(id: string, patch: { altText?: string }): Promise<void>;
+  remove(id: string): Promise<void>;
+  /** Total bytes stored, for the "you are using X" line. */
+  totalBytes(): Promise<number>;
+}
+
 export interface RepoBundle {
   audit: AuditRepo;
   portalTokens: PortalTokenRepo;
@@ -545,6 +569,7 @@ export interface RepoBundle {
   contactTag: ContactTagRepo;
   segment: AudienceSegmentRepo;
   settings: MailflowSettingsRepo;
+  media: MediaFileRepo;
 }
 
 /** Zeroed stats, used when the campaign tables aren't there yet. */
@@ -822,6 +847,22 @@ async function ensureSettingsTables(db: ReturnType<typeof getDb>): Promise<void>
     "updated_by" text NOT NULL
   )`);
   await db.execute(sql`ALTER TABLE "mailflow_settings" ENABLE ROW LEVEL SECURITY`);
+}
+
+/** Create the media table when drizzle/0023 hasn't been applied. */
+async function ensureMediaTables(db: ReturnType<typeof getDb>): Promise<void> {
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS "media_files" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+    "name" text NOT NULL,
+    "content_type" text NOT NULL,
+    "size" integer NOT NULL,
+    "data" text NOT NULL,
+    "alt_text" text DEFAULT '' NOT NULL,
+    "uploaded_by" text NOT NULL
+  )`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "media_files_created_at_idx" ON "media_files" ("created_at")`);
+  await db.execute(sql`ALTER TABLE "media_files" ENABLE ROW LEVEL SECURITY`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2650,6 +2691,92 @@ function realRepos(): RepoBundle {
         }
       },
     },
+    media: {
+      async list() {
+        const db = getDb();
+        try {
+          return await db
+            .select({
+              id: mediaFiles.id,
+              createdAt: mediaFiles.createdAt,
+              name: mediaFiles.name,
+              contentType: mediaFiles.contentType,
+              size: mediaFiles.size,
+              altText: mediaFiles.altText,
+              uploadedBy: mediaFiles.uploadedBy,
+            })
+            .from(mediaFiles)
+            .orderBy(desc(mediaFiles.createdAt));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async get(id) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(mediaFiles)
+            .where(eq(mediaFiles.id, id))
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async create(row) {
+        const db = getDb();
+        const doInsert = () =>
+          db.insert(mediaFiles).values(row).returning({
+              id: mediaFiles.id,
+              createdAt: mediaFiles.createdAt,
+              name: mediaFiles.name,
+              contentType: mediaFiles.contentType,
+              size: mediaFiles.size,
+              altText: mediaFiles.altText,
+              uploadedBy: mediaFiles.uploadedBy,
+            });
+        try {
+          const [inserted] = await doInsert();
+          return inserted;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          await ensureMediaTables(db);
+          const [inserted] = await doInsert();
+          return inserted;
+        }
+      },
+      async update(id, patch) {
+        const db = getDb();
+        try {
+          await db.update(mediaFiles).set(patch).where(eq(mediaFiles.id, id));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+        }
+      },
+      async remove(id) {
+        const db = getDb();
+        try {
+          await db.delete(mediaFiles).where(eq(mediaFiles.id, id));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+        }
+      },
+      async totalBytes() {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select({ total: sql<number>`coalesce(sum(${mediaFiles.size}), 0)::int` })
+            .from(mediaFiles);
+          return row?.total ?? 0;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return 0;
+        }
+      },
+    },
   };
 }
 
@@ -2692,6 +2819,7 @@ function mockRepos(): RepoBundle {
   const mockTagStore = new Map<string, ContactTagRow>();
   const mockSegmentStore = new Map<string, AudienceSegmentRow>();
   let mockSettingsRow: MailflowSettingsRow | null = null;
+  const mockMediaStore = new Map<string, MediaFileRow>();
 
   const newId = () => crypto.randomUUID();
 
@@ -3816,6 +3944,45 @@ function mockRepos(): RepoBundle {
           updatedBy,
           updatedAt: new Date(),
         };
+      },
+    },
+    media: {
+      async list() {
+        return [...mockMediaStore.values()]
+          .map(({ data: _data, ...rest }) => rest)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      },
+      async get(id) {
+        return mockMediaStore.get(id) ?? null;
+      },
+      async create(row) {
+        const id = row.id ?? `file-${mockMediaStore.size + 1}`;
+        const file: MediaFileRow = {
+          id,
+          createdAt: new Date(),
+          name: row.name,
+          contentType: row.contentType,
+          size: row.size,
+          data: row.data,
+          altText: row.altText ?? "",
+          uploadedBy: row.uploadedBy,
+        };
+        mockMediaStore.set(id, file);
+        const { data: _data, ...summary } = file;
+        return summary;
+      },
+      async update(id, patch) {
+        const existing = mockMediaStore.get(id);
+        if (!existing) return;
+        mockMediaStore.set(id, { ...existing, ...patch });
+      },
+      async remove(id) {
+        mockMediaStore.delete(id);
+      },
+      async totalBytes() {
+        let total = 0;
+        for (const f of mockMediaStore.values()) total += f.size;
+        return total;
       },
     },
   };

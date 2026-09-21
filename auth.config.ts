@@ -118,6 +118,14 @@ export default {
         // Published landing pages and their view counter.
         pathname.startsWith("/p/") ||
         pathname.startsWith("/api/pages/") ||
+        // Uploaded images, fetched by the mail client rendering an
+        // email. It has no session and never will, and a signed URL
+        // would expire while the email in the inbox does not.
+        //
+        // Reading one is public; adding one is not — /api/files/upload
+        // is excluded here and admin-gates itself besides.
+        (pathname.startsWith("/api/files/") &&
+          pathname !== "/api/files/upload") ||
         pathname === "/login" ||
         pathname === "/" ||
         pathname.startsWith("/styleguide") ||
