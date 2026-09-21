@@ -1,0 +1,167 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779747810260,
+      "tag": "0000_broken_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780300299218,
+      "tag": "0001_stiff_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780608246868,
+      "tag": "0002_loud_scream",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780741815881,
+      "tag": "0003_many_sir_ram",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0004_team_permissions_and_audit_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781100000000,
+      "tag": "0005_team_extras_and_disabled",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0006_otp_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783000000000,
+      "tag": "0007_referrers",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784000000000,
+      "tag": "0008_enable_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784951337931,
+      "tag": "0009_shallow_kid_colt",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784953099384,
+      "tag": "0010_clear_dormammu",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785000000000,
+      "tag": "0011_deal_system_added_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787606131642,
+      "tag": "0012_swift_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787616645893,
+      "tag": "0013_thin_nico_minoru",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787643002126,
+      "tag": "0014_flippant_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787643977809,
+      "tag": "0015_fresh_arclight",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787645885100,
+      "tag": "0016_shallow_maginty",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787697820204,
+      "tag": "0017_useful_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787899616042,
+      "tag": "0018_sparkling_carlie_cooper",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787900421976,
+      "tag": "0019_careful_jocasta",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787900777116,
+      "tag": "0020_easy_doctor_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787900927115,
+      "tag": "0021_lush_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790027785551,
+      "tag": "0022_romantic_gladiator",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LoanFlow">
+  <title>LoanFlow</title>
+  <!-- Three pipeline-stage pills stepping up to the right.
+       Maps onto B.1-B.7 progression: each pill is a phase, the
+       final pill is brand green to read as "settled". -->
+  <rect x="6"  y="36" width="14" height="6" rx="3" fill="#1c2566"/>
+  <rect x="25" y="29" width="14" height="6" rx="3" fill="#1c2566"/>
+  <rect x="44" y="22" width="14" height="6" rx="3" fill="#2b6e4f"/>
+  <!-- Subtle flow arc beneath the stages, sweeping up to the right
+       to suggest forward momentum without competing with the pills. -->
+  <path d="M 8 52 Q 32 60 56 46" stroke="#1c2566" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.32"/>
+</svg>

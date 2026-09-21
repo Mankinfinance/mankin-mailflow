@@ -1,0 +1,11 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LoanFlow">
+  <title>LoanFlow</title>
+  <rect width="512" height="512" fill="#1c2566"/>
+  <!-- Flow arc sweeping up to the right, beneath the stage pills. -->
+  <path d="M 80 400 Q 256 475 432 356" stroke="#ffffff" stroke-width="12" stroke-linecap="round" fill="none" opacity="0.28"/>
+  <!-- Three pipeline-stage pills stepping up; the last is brand green
+       to read as "settled". -->
+  <rect x="86"  y="300" width="184" height="56" rx="28" fill="#ffffff"/>
+  <rect x="164" y="238" width="184" height="56" rx="28" fill="#ffffff"/>
+  <rect x="242" y="176" width="184" height="56" rx="28" fill="#52b788"/>
+</svg>
