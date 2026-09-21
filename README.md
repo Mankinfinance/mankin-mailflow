@@ -111,6 +111,15 @@ drift.** When you change one in either repo, change it in both — or move
 them to a package both consume, which is the real fix if this split
 outlives the year.
 
+## Where this came from
+
+[`docs/history-from-loanflow.md`](docs/history-from-loanflow.md) carries
+the twenty-six commit messages from before the extraction, newest last.
+The code arrived here as one commit; that file is where the reasoning
+behind it lives — why the crons fail closed, why using a template
+copies it rather than referencing it, why the click redirect verifies
+before it forwards.
+
 ## Tests
 
 ```bash
