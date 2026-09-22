@@ -112,6 +112,11 @@ export default {
         // firm's website is reached by strangers; requiring a session
         // would make it unusable by the only people it is for.
         pathname.startsWith("/f/") ||
+        // Survey response pages, opened from a client's inbox. Exactly
+        // the same reasoning as /e/ above, and missed when surveys were
+        // added: a survey link that bounces to a staff sign-in page is
+        // a survey nobody can answer.
+        pathname.startsWith("/s/") ||
         pathname.startsWith("/api/forms/") ||
         // One-click unsubscribe, POSTed by Gmail and Yahoo.
         pathname.startsWith("/api/e/") ||
