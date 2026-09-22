@@ -2,6 +2,7 @@
 
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
+import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { verifyTrackingToken } from "@/lib/campaigns/tracking";
 
 /**
@@ -27,6 +28,14 @@ export async function confirmUnsubscribeAction(
       reason: "unsubscribe",
       campaignId: cid,
       addedBy: "customer",
+    });
+
+    /* Queued, never sent inline: a customer waiting on this page
+       should not wait on somebody's CRM being reachable. */
+    await emitWebhook("contact.unsubscribed", {
+      email: em,
+      campaignId: cid,
+      source: "link",
     });
 
     const recipient = await repos().campaign.findRecipient(cid, em);

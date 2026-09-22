@@ -7,6 +7,7 @@ import {
   Mail,
   MessageSquareQuote,
   PanelsTopLeft,
+  Webhook,
   ClipboardList,
   Settings,
   Users,
@@ -39,6 +40,7 @@ export type MailflowNavKey =
   | "landing-pages"
   | "templates"
   | "files"
+  | "webhooks"
   | "settings";
 
 interface NavEntry {
@@ -66,6 +68,10 @@ const NAV: NavEntry[] = [
   { key: "landing-pages", label: "Landing pages", href: "/marketing/landing-pages", icon: PanelsTopLeft },
   { key: "templates", label: "Templates", href: "/marketing/templates", icon: LayoutTemplate },
   { key: "files", label: "File manager", href: "/marketing/files", icon: FolderOpen },
+  /* Below the file manager and above Settings: it is configuration,
+     but configuration somebody checks when something looks wrong,
+     which is not the same as a setting you fill in once. */
+  { key: "webhooks", label: "Webhooks", href: "/marketing/webhooks", icon: Webhook },
   { key: "settings", label: "Settings", href: "/marketing/settings", icon: Settings },
 ];
 

@@ -2,6 +2,7 @@
 
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
+import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { SurveyAnswersSchema, SurveyConfigSchema } from "@/lib/surveys/types";
 import { verifySurveyToken } from "@/lib/surveys/token";
 
@@ -66,6 +67,21 @@ export async function submitSurveyAction(
     name: verified.claims.nm,
     answers: clean,
     submittedAt: new Date(),
+  });
+
+  /* After the save, not before: announcing a response that failed to
+     persist would have a receiver acting on an answer nobody can find.
+     Carries the score so an alert on a detractor does not require the
+     receiver to know how NPS buckets work. */
+  const npsQuestion = config.data.questions.find((q) => q.kind === "nps");
+  const score = npsQuestion ? Number(clean[npsQuestion.id]) : null;
+  await emitWebhook("survey.responded", {
+    surveyId: survey.id,
+    surveyName: survey.name,
+    email: verified.claims.em,
+    name: verified.claims.nm,
+    nps: Number.isFinite(score) ? score : null,
+    answers: clean,
   });
 
   /* Logged as "system" with the respondent in the metadata, because the

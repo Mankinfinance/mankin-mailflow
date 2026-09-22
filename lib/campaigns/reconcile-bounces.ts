@@ -1,5 +1,6 @@
 import "server-only";
 import { repos } from "@/lib/db/repos";
+import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { auditLog } from "@/lib/audit";
 import { teamMember, TEAM } from "@/lib/team";
 import {
@@ -132,6 +133,10 @@ export async function reconcileBounces(
       });
       alreadySuppressed.add(bounce.email);
       result.suppressed += 1;
+      await emitWebhook("contact.bounced", {
+        email: bounce.email,
+        hard: true,
+      });
       await markRecipientBounced(bounce, recipientIdByEmail, true);
 
       await auditLog({

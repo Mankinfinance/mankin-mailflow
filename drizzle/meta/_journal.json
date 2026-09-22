@@ -176,6 +176,13 @@
       "when": 1790046201201,
       "tag": "0024_broad_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790053168232,
+      "tag": "0025_gigantic_fantastic_four",
+      "breakpoints": true
     }
   ]
 }

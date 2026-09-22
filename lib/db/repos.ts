@@ -87,10 +87,16 @@ import {
   type NewAudienceSegment,
   surveys,
   surveyResponses,
+  webhookEndpoints,
+  webhookDeliveries,
   type SurveyRow,
   type NewSurveyRow,
   type SurveyResponseRow,
   type NewSurveyResponse,
+  type WebhookEndpointRow,
+  type NewWebhookEndpoint,
+  type WebhookDeliveryRow,
+  type NewWebhookDelivery,
 } from "./schema";
 import type { Deal } from "@/lib/clients/salestrekker/types";
 import { DealSchema } from "@/lib/clients/salestrekker/types";
@@ -588,6 +594,23 @@ export interface SurveyRepo {
   responseCounts(): Promise<Record<string, number>>;
 }
 
+export interface WebhookRepo {
+  createEndpoint(row: NewWebhookEndpoint): Promise<WebhookEndpointRow>;
+  getEndpoint(id: string): Promise<WebhookEndpointRow | null>;
+  listEndpoints(): Promise<WebhookEndpointRow[]>;
+  /** Enabled endpoints subscribed to an event — the dispatch fan-out. */
+  endpointsFor(event: string): Promise<WebhookEndpointRow[]>;
+  updateEndpoint(id: string, patch: Partial<NewWebhookEndpoint>): Promise<void>;
+  removeEndpoint(id: string): Promise<void>;
+
+  enqueue(row: NewWebhookDelivery): Promise<WebhookDeliveryRow>;
+  /** Deliveries whose next attempt is due, oldest first. */
+  dueDeliveries(now: Date, limit: number): Promise<WebhookDeliveryRow[]>;
+  updateDelivery(id: string, patch: Partial<NewWebhookDelivery>): Promise<void>;
+  /** Recent deliveries for one endpoint, newest first, for the log. */
+  listDeliveries(endpointId: string, limit?: number): Promise<WebhookDeliveryRow[]>;
+}
+
 export interface RepoBundle {
   audit: AuditRepo;
   portalTokens: PortalTokenRepo;
@@ -613,6 +636,7 @@ export interface RepoBundle {
   settings: MailflowSettingsRepo;
   media: MediaFileRepo;
   survey: SurveyRepo;
+  webhook: WebhookRepo;
 }
 
 /** Zeroed stats, used when the campaign tables aren't there yet. */
@@ -2748,6 +2772,118 @@ function realRepos(): RepoBundle {
         }
       },
     },
+    webhook: {
+      async createEndpoint(row) {
+        const db = getDb();
+        const [created] = await db.insert(webhookEndpoints).values(row).returning();
+        return created;
+      },
+      async getEndpoint(id) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(webhookEndpoints)
+            .where(eq(webhookEndpoints.id, id))
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async listEndpoints() {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(webhookEndpoints)
+            .orderBy(desc(webhookEndpoints.createdAt));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async endpointsFor(event) {
+        const db = getDb();
+        try {
+          const rows = await db
+            .select()
+            .from(webhookEndpoints)
+            .where(eq(webhookEndpoints.enabled, true));
+          /* Filtered here rather than in SQL: the subscribed events
+             live inside the JSONB config, and the endpoint count is a
+             handful. A jsonb containment query would be faster and
+             far less obvious. */
+          return rows.filter((r) => {
+            const config = r.config as { events?: string[] };
+            return Array.isArray(config.events) && config.events.includes(event);
+          });
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async updateEndpoint(id, patch) {
+        const db = getDb();
+        await db
+          .update(webhookEndpoints)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(eq(webhookEndpoints.id, id));
+      },
+      async removeEndpoint(id) {
+        const db = getDb();
+        await db
+          .delete(webhookDeliveries)
+          .where(eq(webhookDeliveries.endpointId, id));
+        await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
+      },
+      async enqueue(row) {
+        const db = getDb();
+        const [created] = await db.insert(webhookDeliveries).values(row).returning();
+        return created;
+      },
+      async dueDeliveries(now, limit) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(webhookDeliveries)
+            .where(
+              and(
+                eq(webhookDeliveries.status, "pending"),
+                lte(webhookDeliveries.nextAttemptAt, now),
+              ),
+            )
+            .orderBy(webhookDeliveries.nextAttemptAt)
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async updateDelivery(id, patch) {
+        const db = getDb();
+        await db
+          .update(webhookDeliveries)
+          .set(patch)
+          .where(eq(webhookDeliveries.id, id));
+      },
+      async listDeliveries(endpointId, limit = 50) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(webhookDeliveries)
+            .where(eq(webhookDeliveries.endpointId, endpointId))
+            .orderBy(desc(webhookDeliveries.createdAt))
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+    },
     survey: {
       async create(row) {
         const db = getDb();
@@ -2975,6 +3111,8 @@ function mockRepos(): RepoBundle {
   let mockLastImport: ImportMeta | null = null;
   const mockDealNotesStore: DealNoteRow[] = [];
   const mockReferrerStore = new Map<string, ReferrerRow>();
+  const mockWebhookStore = new Map<string, WebhookEndpointRow>();
+  const mockWebhookDeliveryStore = new Map<string, WebhookDeliveryRow>();
   const mockSurveyStore = new Map<string, SurveyRow>();
   const mockSurveyResponseStore = new Map<string, SurveyResponseRow>();
   const mockCampaignStore = new Map<string, CampaignRow>();
@@ -4126,6 +4264,103 @@ function mockRepos(): RepoBundle {
           updatedBy,
           updatedAt: new Date(),
         };
+      },
+    },
+    webhook: {
+      async createEndpoint(row) {
+        const id = row.id ?? `wh-${mockWebhookStore.size + 1}`;
+        const now = new Date();
+        const created: WebhookEndpointRow = {
+          id,
+          createdAt: now,
+          updatedAt: now,
+          name: row.name,
+          config: row.config,
+          secret: row.secret,
+          enabled: row.enabled ?? true,
+          createdBy: row.createdBy,
+          lastDeliveredAt: null,
+          lastFailedAt: null,
+          consecutiveFailures: 0,
+        } as WebhookEndpointRow;
+        mockWebhookStore.set(id, created);
+        return created;
+      },
+      async getEndpoint(id) {
+        return mockWebhookStore.get(id) ?? null;
+      },
+      async listEndpoints() {
+        return Array.from(mockWebhookStore.values()).sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+      },
+      async endpointsFor(event) {
+        return Array.from(mockWebhookStore.values()).filter((r) => {
+          if (!r.enabled) return false;
+          const config = r.config as { events?: string[] };
+          return Array.isArray(config.events) && config.events.includes(event);
+        });
+      },
+      async updateEndpoint(id, patch) {
+        const existing = mockWebhookStore.get(id);
+        if (!existing) return;
+        mockWebhookStore.set(id, {
+          ...existing,
+          ...patch,
+          updatedAt: new Date(),
+        } as WebhookEndpointRow);
+      },
+      async removeEndpoint(id) {
+        mockWebhookStore.delete(id);
+        for (const [key, d] of mockWebhookDeliveryStore) {
+          if (d.endpointId === id) mockWebhookDeliveryStore.delete(key);
+        }
+      },
+      async enqueue(row) {
+        const id = row.id ?? `whd-${mockWebhookDeliveryStore.size + 1}`;
+        const created: WebhookDeliveryRow = {
+          id,
+          endpointId: row.endpointId,
+          event: row.event,
+          payload: row.payload,
+          status: row.status ?? "pending",
+          attempts: row.attempts ?? 0,
+          nextAttemptAt: row.nextAttemptAt ?? new Date(),
+          lastStatus: row.lastStatus ?? null,
+          lastError: row.lastError ?? null,
+          createdAt: row.createdAt ?? new Date(),
+          deliveredAt: row.deliveredAt ?? null,
+        } as WebhookDeliveryRow;
+        mockWebhookDeliveryStore.set(id, created);
+        return created;
+      },
+      async dueDeliveries(now, limit) {
+        return Array.from(mockWebhookDeliveryStore.values())
+          .filter(
+            (d) =>
+              d.status === "pending" &&
+              d.nextAttemptAt !== null &&
+              d.nextAttemptAt <= now,
+          )
+          .sort(
+            (a, b) =>
+              (a.nextAttemptAt?.getTime() ?? 0) - (b.nextAttemptAt?.getTime() ?? 0),
+          )
+          .slice(0, limit);
+      },
+      async updateDelivery(id, patch) {
+        const existing = mockWebhookDeliveryStore.get(id);
+        if (!existing) return;
+        mockWebhookDeliveryStore.set(id, {
+          ...existing,
+          ...patch,
+        } as WebhookDeliveryRow);
+      },
+      async listDeliveries(endpointId, limit = 50) {
+        return Array.from(mockWebhookDeliveryStore.values())
+          .filter((d) => d.endpointId === endpointId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, limit);
       },
     },
     survey: {

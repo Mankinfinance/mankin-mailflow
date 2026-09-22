@@ -1,5 +1,6 @@
 import "server-only";
 import { repos } from "@/lib/db/repos";
+import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { auditLog } from "@/lib/audit";
 import { teamMember } from "@/lib/team";
 import { OutlookAppOnlySendError } from "@/lib/clients/outlook-app-only";
@@ -180,6 +181,18 @@ export async function dispatchCampaignBatch(
     await campaignRepo.update(campaign.id, {
       status: "sent",
       completedAt: new Date(),
+    });
+    /* Emitted once, when the last recipient drains — not per batch.
+       A receiver wants the totals, and a campaign that sends over six
+       batches would otherwise announce itself six times. */
+    const totals = await campaignRepo.stats(campaign.id);
+    await emitWebhook("campaign.sent", {
+      campaignId: campaign.id,
+      name: campaign.name,
+      subject: campaign.subject,
+      sent: totals.sent,
+      failed: totals.failed,
+      skipped: totals.skipped,
     });
   }
 

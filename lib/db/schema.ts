@@ -1602,3 +1602,104 @@ export const surveyResponses = pgTable(
 
 export type SurveyResponseRow = typeof surveyResponses.$inferSelect;
 export type NewSurveyResponse = typeof surveyResponses.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* webhook_endpoints — where to tell another system what happened             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One receiver. The URL and the events it wants live in `config` as
+ * JSONB, parsed on read like every other configurable thing here.
+ *
+ * `secret` is stored because we need it to sign every delivery, but it
+ * is shown to a broker exactly once — at creation — and never read
+ * back into the UI. A secret that can be re-read from a settings page
+ * is a secret that leaks through whoever can open that page.
+ */
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+
+    name: text("name").notNull(),
+    /** WebhookEndpointConfig payload — url, events, description. */
+    config: jsonb("config").notNull(),
+    /** HMAC key for the signature header. Never surfaced after create. */
+    secret: text("secret").notNull(),
+
+    /** Paused endpoints keep their history but receive nothing. */
+    enabled: boolean("enabled").notNull().default(true),
+    createdBy: text("created_by").notNull(),
+
+    /** Last outcome, so the list can show health without a join. */
+    lastDeliveredAt: timestamp("last_delivered_at", { withTimezone: true }),
+    lastFailedAt: timestamp("last_failed_at", { withTimezone: true }),
+    /**
+     * Failures in a row. Reset on any success — the number that
+     * matters for "is this endpoint dead" is the current streak, not
+     * the lifetime total.
+     */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  },
+  (t) => [index("webhook_endpoints_enabled_idx").on(t.enabled)],
+);
+
+export type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
+export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* webhook_deliveries — the queue, and the record of what happened            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One event bound for one endpoint.
+ *
+ * Both a work queue and an audit trail, which is why a delivered row
+ * is kept rather than dropped: "did the CRM ever hear that this client
+ * unsubscribed" is a question worth being able to answer months later,
+ * and it is the kind of question that gets asked when somebody
+ * complains about still being mailed.
+ *
+ * `nextAttemptAt` with `status` is the only query the drain makes, so
+ * they are indexed together.
+ */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    endpointId: uuid("endpoint_id").notNull(),
+
+    event: text("event").notNull(),
+    /** The envelope, exactly as it will be serialised and signed. */
+    payload: jsonb("payload").notNull(),
+
+    /** pending | delivered | failed | abandoned */
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    /** Null once terminal. */
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+
+    /** Last response, for the log. Null when the request never landed. */
+    lastStatus: integer("last_status"),
+    lastError: text("last_error"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("webhook_deliveries_endpoint_idx").on(t.endpointId),
+    index("webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt),
+    index("webhook_deliveries_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
+export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;

@@ -119,6 +119,12 @@ Vercel rejects sub-daily cron schedules **at deploy time** on Hobby — it
 fails the build rather than quietly skipping runs. `vercel.json` is on
 daily schedules for that reason. Hourly sending needs Pro.
 
+That cost is worst for `/api/cron/webhooks`, which drains queued
+webhook deliveries. On a daily schedule an unsubscribe can take a day
+to reach a receiver, which is slow for something another system is
+waiting on. It wants to run every few minutes, and is the strongest
+single argument for Pro.
+
 ## When it does not work
 
 - **404 on every path, Ready, fast build** → Framework Preset is not Next.js
