@@ -160,3 +160,58 @@ export async function deleteAutomationAction(id: string): Promise<Result> {
   revalidatePath("/marketing/automations");
   return { ok: true };
 }
+
+/**
+ * Point a sequence's trigger at a form or a tag.
+ *
+ * The one thing a template cannot decide for the broker, so it is the
+ * one thing they have to set before a sequence will run. Refused while
+ * the sequence is live: changing what starts a running automation
+ * halfway through would leave whoever is partway along it enrolled by
+ * a rule that no longer exists, and the fix is to pause, change, and
+ * turn it back on.
+ */
+export async function setTriggerTargetAction(
+  id: string,
+  target: string,
+): Promise<Result> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const automation = await repos().automation.get(id);
+  if (!automation) return { ok: false, error: "Sequence not found." };
+  if (automation.status === "live") {
+    return { ok: false, error: "Pause the sequence before changing what starts it." };
+  }
+
+  const parsed = AutomationFlowSchema.safeParse(automation.flow);
+  if (!parsed.success) {
+    return { ok: false, error: "This sequence could not be read." };
+  }
+
+  const trigger = parsed.data.trigger;
+  const chosen = target.trim();
+  if (!chosen) return { ok: false, error: "Pick one first." };
+
+  let next;
+  if (trigger.kind === "form-submission") {
+    const form = await repos().form.get(chosen);
+    if (!form) return { ok: false, error: "That form no longer exists." };
+    next = { ...trigger, formId: chosen };
+  } else if (trigger.kind === "tag-added") {
+    next = { ...trigger, tag: chosen };
+  } else {
+    return { ok: false, error: "This sequence's trigger is not one you pick." };
+  }
+
+  await repos().automation.update(id, {
+    flow: { ...parsed.data, trigger: next },
+  });
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "automation.set-trigger",
+    meta: { automationId: id, kind: trigger.kind, target: chosen },
+  });
+  revalidatePath(`/marketing/automations/${id}`);
+  return { ok: true };
+}

@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { daysInStage, describeTrigger, evaluateTrigger, isAnniversaryDue } from "./triggers";
+import {
+  daysInStage,
+  describeTrigger,
+  evaluateTrigger,
+  isAnniversaryDue,
+  percentPaidDown,
+  type SubmissionHit,
+  type TagHit,
+} from "./triggers";
 import type { SettlementRow } from "@/lib/commission-parser";
 import type { Deal } from "@/lib/clients/salestrekker/types";
 
@@ -186,5 +194,252 @@ describe("describeTrigger", () => {
         "Pre-Approval Only",
       ),
     ).toBe("A deal has been at Pre-Approval Only for 60 days");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The triggers added for Mailchimp parity                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("the form-submission trigger", () => {
+  const submission = (over: Partial<SubmissionHit> = {}): SubmissionHit => ({
+    formId: "F-1",
+    email: "new@example.com",
+    name: "Jess Waller",
+    submittedAt: new Date("2026-08-24T10:00:00"),
+    dealId: null,
+    ...over,
+  });
+
+  it("enrols someone who enquired through the named form", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [],
+      submissions: [submission()],
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].email).toBe("new@example.com");
+  });
+
+  it("ignores enquiries from a different form", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [],
+      submissions: [submission({ formId: "F-2" })],
+    });
+    expect(hits).toEqual([]);
+  });
+
+  it("enrols even when the enquiry never became a deal", () => {
+    // A welcome sequence should not be contingent on the pipeline
+    // write having succeeded — that failure is ours, not theirs.
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [],
+      submissions: [submission({ dealId: null })],
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].firstName).toBe("Jess");
+    expect(hits[0].fields).toEqual({});
+  });
+
+  it("uses the deal's merge context when there is one", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [deal({ id: "D-9", name: "Tom Reilly", email: "new@example.com" })],
+      submissions: [submission({ dealId: "D-9" })],
+    });
+    expect(hits[0].name).toBe("Tom Reilly");
+    expect(hits[0].firstName).toBe("Tom");
+    expect(hits[0].sourceId).toBe("D-9");
+  });
+
+  it("never enrols someone already in the sequence", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      alreadyEnrolled: new Set(["new@example.com"]),
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [],
+      submissions: [submission()],
+    });
+    expect(hits).toEqual([]);
+  });
+
+  it("never enrols a suppressed address", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      suppressed: new Set(["new@example.com"]),
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [],
+      submissions: [submission()],
+    });
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("the tag-added trigger", () => {
+  const tagged = (over: Partial<TagHit> = {}): TagHit => ({
+    email: "sarah@example.com",
+    tag: "Refinance watch",
+    addedAt: new Date("2026-08-24T10:00:00"),
+    ...over,
+  });
+
+  it("matches the tag regardless of case", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "tag-added", tag: "refinance WATCH" },
+      settlements: [settlement()],
+      deals: [],
+      tagEvents: [tagged()],
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].sourceKind).toBe("settlements");
+  });
+
+  it("ignores a different tag", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "tag-added", tag: "VIP" },
+      settlements: [settlement()],
+      deals: [],
+      tagEvents: [tagged()],
+    });
+    expect(hits).toEqual([]);
+  });
+
+  it("prefers the back-book record when the contact is in both", () => {
+    // Same precedence the subscriber list and the audience resolver
+    // use, so the merge context is the richer one.
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "tag-added", tag: "Refinance watch" },
+      settlements: [settlement()],
+      deals: [deal({ email: "sarah@example.com" })],
+      tagEvents: [tagged()],
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].sourceKind).toBe("settlements");
+  });
+
+  it("falls back to the pipeline for a contact with no settlement", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "tag-added", tag: "Refinance watch" },
+      settlements: [],
+      deals: [deal({ email: "sarah@example.com" })],
+      tagEvents: [tagged()],
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].sourceKind).toBe("deals");
+  });
+
+  it("skips a tag on someone in neither dataset", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "tag-added", tag: "Refinance watch" },
+      settlements: [],
+      deals: [],
+      tagEvents: [tagged({ email: "ghost@example.com" })],
+    });
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("percentPaidDown", () => {
+  it("measures progress against what the loan started at", () => {
+    expect(percentPaidDown({ settlementAmount: 400000, currentBalance: 300000 }))
+      .toBeCloseTo(25);
+  });
+
+  it("is unknown rather than complete when there is no starting balance", () => {
+    // Zero would read as a fully repaid loan and fire every milestone.
+    expect(percentPaidDown({ settlementAmount: 0, currentBalance: 0 })).toBeNull();
+  });
+
+  it("reads a redraw as no progress rather than negative progress", () => {
+    expect(percentPaidDown({ settlementAmount: 400000, currentBalance: 430000 })).toBe(0);
+  });
+});
+
+describe("the equity-milestone trigger", () => {
+  it("fires once a loan passes the threshold", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "equity-milestone", percentPaidDown: 25 },
+      settlements: [settlement({ settlementAmount: 400000, currentBalance: 290000 })],
+      deals: [],
+    });
+    expect(hits).toHaveLength(1);
+  });
+
+  it("does not fire below it", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "equity-milestone", percentPaidDown: 25 },
+      settlements: [settlement({ settlementAmount: 400000, currentBalance: 320000 })],
+      deals: [],
+    });
+    expect(hits).toEqual([]);
+  });
+
+  it("ignores a loan that has refinanced away", () => {
+    // Its balance is zero, which would otherwise read as 100% paid
+    // down and send a milestone email about a loan we no longer hold.
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "equity-milestone", percentPaidDown: 25 },
+      settlements: [
+        settlement({
+          loanStatus: "discharged",
+          settlementAmount: 400000,
+          currentBalance: 0,
+        }),
+      ],
+      deals: [],
+    });
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("describeTrigger for the new kinds", () => {
+  it("names the form when it knows it", () => {
+    expect(
+      describeTrigger({ kind: "form-submission", formId: "F-1" }, undefined, "Rate enquiry"),
+    ).toBe("Someone enquires through Rate enquiry");
+  });
+
+  it("falls back to 'a form' when it does not", () => {
+    expect(describeTrigger({ kind: "form-submission", formId: "F-1" })).toMatch(/a form/);
+  });
+
+  it("quotes the tag", () => {
+    expect(describeTrigger({ kind: "tag-added", tag: "VIP" })).toBe(
+      'A contact is tagged "VIP"',
+    );
+  });
+
+  it("describes an unset tag as a choice, not as empty quotes", () => {
+    // This is what a template card shows before the broker picks one.
+    expect(describeTrigger({ kind: "tag-added", tag: "" })).toBe(
+      "A contact is tagged with a label you choose",
+    );
+    expect(describeTrigger({ kind: "tag-added", tag: "  " })).not.toMatch(/""/);
+  });
+
+  it("states the milestone", () => {
+    expect(describeTrigger({ kind: "equity-milestone", percentPaidDown: 25 })).toBe(
+      "A loan passes 25% paid down",
+    );
   });
 });

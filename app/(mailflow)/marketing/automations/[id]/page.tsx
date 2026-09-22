@@ -4,9 +4,10 @@ import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import { MailflowContent, PageTitle } from "@/components/mailflow/MailflowPage";
 import { AutomationCanvas } from "@/components/mailflow/AutomationCanvas";
 import { AutomationControls } from "@/components/mailflow/AutomationControls";
+import { TriggerTargetPicker } from "@/components/mailflow/TriggerTargetPicker";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { repos } from "@/lib/db/repos";
-import { teamMember } from "@/lib/team";
+import { TEAM, teamMember } from "@/lib/team";
 import { STAGES } from "@/lib/clients/salestrekker/types";
 import { AutomationFlowSchema } from "@/lib/automations/types";
 import { validateFlow } from "@/lib/automations/engine";
@@ -29,6 +30,44 @@ export default async function AutomationPage({
     repos().automation.nodeStats(automation.id),
     repos().automation.listRuns(automation.id, { limit: 5000 }),
   ]);
+
+  /* A signup trigger stores the form's id; the card has to name it.
+     Fetched only for that trigger kind — every other sequence would be
+     paying for a row it never reads. */
+  const triggerForm =
+    parsed.success && parsed.data.trigger.kind === "form-submission"
+      ? await repos().form.get(parsed.data.trigger.formId)
+      : null;
+
+  /* The choice this sequence's trigger needs, if it needs one. Loaded
+     only for the two kinds that do — a settlement anniversary has no
+     form or tag to pick. */
+  const picks =
+    parsed.success &&
+    (parsed.data.trigger.kind === "form-submission" ||
+      parsed.data.trigger.kind === "tag-added")
+      ? await (async () => {
+          const kind = parsed.data.trigger.kind as
+            | "form-submission"
+            | "tag-added";
+          if (kind === "form-submission") {
+            const [forms, counts] = await Promise.all([
+              repos().form.list({ statuses: ["live", "draft"] }),
+              repos().form.submissionCounts(),
+            ]);
+            return {
+              kind,
+              forms: forms.map((f) => ({
+                id: f.id,
+                name: f.name,
+                submissions: counts[f.id] ?? 0,
+              })),
+              tags: [],
+            };
+          }
+          return { kind, forms: [], tags: await repos().contactTag.counts() };
+        })()
+      : null;
 
   /* Where everyone currently sits. The canvas shows this per node
      because "six people are waiting somewhere in the sequence" is only
@@ -102,6 +141,21 @@ export default async function AutomationPage({
             </div>
           )}
 
+          {picks && parsed.success && (
+            <TriggerTargetPicker
+              automationId={automation.id}
+              kind={picks.kind}
+              current={
+                picks.kind === "form-submission"
+                  ? (parsed.data.trigger as { formId: string }).formId
+                  : (parsed.data.trigger as { tag: string }).tag
+              }
+              forms={picks.forms}
+              tags={picks.tags}
+              locked={automation.status === "live"}
+            />
+          )}
+
           {parsed.success ? (
             <AutomationCanvas
               flow={parsed.data}
@@ -114,6 +168,10 @@ export default async function AutomationPage({
                   ? stageLabels[parsed.data.trigger.stageId]
                   : undefined
               }
+              formName={triggerForm?.name}
+              brokerNames={Object.fromEntries(
+                TEAM.map((m) => [m.id, m.short]),
+              )}
             />
           ) : (
             <p className="text-[12.5px] text-danger">

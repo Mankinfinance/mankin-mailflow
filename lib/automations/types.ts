@@ -34,6 +34,33 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     /** How long it must have been there, in days. */
     afterDays: z.number().int().nonnegative().default(0),
   }),
+  z.object({
+    kind: z.literal("form-submission"),
+    /** The form whose enquiries start this sequence. */
+    formId: z.string(),
+  }),
+  z.object({
+    kind: z.literal("tag-added"),
+    /** Compared case-insensitively, as tags are everywhere else. */
+    tag: z.string(),
+  }),
+  z.object({
+    /**
+     * A loan crosses a share of its original balance paid down.
+     *
+     * This is where the brokerage equivalent of a birthday trigger
+     * lands. Mailchimp's is a date on a contact record; there is no
+     * birthday in a commission file and inventing the field would ship
+     * a trigger that never fires. What the book does hold is what the
+     * loan started at and what it sits at now, and a client who has
+     * paid off a quarter of their loan is in a genuinely different
+     * conversation from one who has not — equity, a top-up, a review.
+     * A milestone from real data beats a date we would have to guess.
+     */
+    kind: z.literal("equity-milestone"),
+    /** e.g. 25 for "has paid down a quarter of the original balance". */
+    percentPaidDown: z.number().int().positive().max(100).default(25),
+  }),
 ]);
 
 export type Trigger = z.infer<typeof TriggerSchema>;
@@ -44,6 +71,41 @@ export type Trigger = z.infer<typeof TriggerSchema>;
 
 export const NodeKindSchema = z.enum(["delay", "send", "condition", "exit"]);
 export type NodeKind = z.infer<typeof NodeKindSchema>;
+
+/**
+ * What an If/Else can ask about the contact themselves, rather than
+ * about the email they were last sent.
+ *
+ * Mailchimp's condition list is Birthday, VIP Status and Location —
+ * facts about the person. Ours was only ever "did they open it", which
+ * made every branch a question about the last send. These are the
+ * brokerage's equivalents, drawn from the book: who the lender is,
+ * what the loan is doing, who wrote it, what we have labelled them.
+ *
+ * Answered against the contact's CURRENT record, not the values frozen
+ * when they entered. A branch asks a question about now — "are they
+ * still with this lender" — and freezing it would have a sequence act
+ * on a fact that stopped being true four months ago.
+ */
+export const DataConditionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("tag"), tag: z.string() }),
+  z.object({ kind: z.literal("lender"), codes: z.array(z.string()).min(1) }),
+  z.object({
+    kind: z.literal("balance"),
+    /** Inclusive bounds in dollars. Either may be omitted for one-sided. */
+    min: z.number().nonnegative().optional(),
+    max: z.number().nonnegative().optional(),
+  }),
+  z.object({
+    kind: z.literal("loan-age"),
+    /** Inclusive bounds in months since settlement. */
+    minMonths: z.number().int().nonnegative().optional(),
+    maxMonths: z.number().int().nonnegative().optional(),
+  }),
+  z.object({ kind: z.literal("broker"), brokerIds: z.array(z.string()).min(1) }),
+]);
+
+export type DataCondition = z.infer<typeof DataConditionSchema>;
 
 export const AutomationNodeSchema = z.object({
   id: z.string(),
@@ -62,6 +124,16 @@ export const AutomationNodeSchema = z.object({
   check: z.enum(["opened", "clicked"]).optional(),
   /** How long to give it before deciding "no". */
   withinDays: z.number().int().positive().optional(),
+  /**
+   * condition: a question about the contact instead of the last send.
+   *
+   * Added alongside `check` rather than replacing it so every flow
+   * already stored keeps parsing untouched — an engagement condition is
+   * one with no `condition` set, which is exactly what the old rows
+   * look like. When both are present this wins, and the editor only
+   * ever sets one.
+   */
+  condition: DataConditionSchema.optional(),
   nextYes: z.string().nullable().optional(),
   nextNo: z.string().nullable().optional(),
 
@@ -430,6 +502,159 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           next: "exit-winback",
         }),
         { id: "exit-winback", kind: "exit", note: "Asked once, left alone after." },
+      ],
+    },
+  },
+
+  /* ---- The three below are started by the newer triggers ---- */
+
+  {
+    id: "new-enquiry-welcome",
+    name: "Welcome a new enquiry",
+    description:
+      "Answers a form enquiry straight away, then follows up once if nobody replies.",
+    category: "Welcome",
+    icon: "hand-heart",
+    volume: "One per enquiry",
+    flow: {
+      /* Left blank deliberately: which form starts this is the one
+         thing the broker has to choose, and validateFlow refuses to
+         let it go live until they have. */
+      trigger: { kind: "form-submission", formId: "" },
+      entryNodeId: "send-welcome",
+      nodes: [
+        send({
+          id: "send-welcome",
+          label: "Thanks for getting in touch",
+          subject: "Thanks {{first_name}} — here is what happens next",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "Thanks for getting in touch. Your enquiry has come through and one of us will call you within one business day.",
+            "",
+            "Before that call it helps to have a rough idea of two things: what you are hoping to borrow, and when you would like to settle. No documents needed yet.",
+            "",
+            "{{broker_name}}",
+          ],
+          next: "wait-3",
+        }),
+        { id: "wait-3", kind: "delay", label: "Wait 3 days", days: 3, next: "opened" },
+        {
+          id: "opened",
+          kind: "condition",
+          label: "Opened it?",
+          check: "opened",
+          withinDays: 3,
+          nextYes: "exit-welcome",
+          nextNo: "send-nudge",
+        },
+        send({
+          id: "send-nudge",
+          label: "One nudge",
+          subject: "{{first_name}}, did this reach you?",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "I wrote a few days ago about your enquiry and have not heard back — which usually means it landed somewhere it should not have.",
+            "",
+            "If you are still looking, replying to this is enough and I will call you.",
+            "",
+            "{{broker_name}}",
+          ],
+          next: "exit-welcome",
+        }),
+        { id: "exit-welcome", kind: "exit", note: "Handed to the broker from here." },
+      ],
+    },
+  },
+
+  {
+    id: "tagged-followup",
+    name: "Follow up a tagged contact",
+    description:
+      "Writes to anyone you tag, so labelling a client is the whole of the work.",
+    category: "Reminder",
+    icon: "tag",
+    volume: "Depends how you tag",
+    flow: {
+      /* Same as the form above — the tag is the broker's to pick. */
+      trigger: { kind: "tag-added", tag: "" },
+      entryNodeId: "send-tagged",
+      nodes: [
+        send({
+          id: "send-tagged",
+          label: "Reach out",
+          subject: "{{first_name}}, worth a quick look at your loan",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "Your {{lender}} loan has come up on my list for a review. Nothing is wrong — it is the sort of check worth doing once a year.",
+            "",
+            "If you would like me to run the numbers, reply and I will come back with where it sits.",
+            "",
+            "{{broker_name}}",
+          ],
+          next: "exit-tagged",
+        }),
+        { id: "exit-tagged", kind: "exit", note: "One email per tag." },
+      ],
+    },
+  },
+
+  {
+    id: "equity-milestone",
+    name: "A quarter of the loan paid off",
+    description:
+      "Marks the milestone, and asks a different question of a large loan than a small one.",
+    category: "Anniversary",
+    icon: "trending-up",
+    volume: "A handful a month",
+    flow: {
+      trigger: { kind: "equity-milestone", percentPaidDown: 25 },
+      entryNodeId: "send-milestone",
+      nodes: [
+        send({
+          id: "send-milestone",
+          label: "Milestone",
+          subject: "{{first_name}}, you have paid off a quarter of your loan",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "Your {{lender}} loan has passed a quarter paid down. That is worth knowing about, because it changes two things: what the loan costs you, and what it could be used for.",
+            "",
+            "Happy to walk through either.",
+            "",
+            "{{broker_name}}",
+          ],
+          next: "big-loan",
+        }),
+        {
+          /* A condition about the contact, not the email. This is the
+             shape of every branch that asks something the book already
+             knows — and it needs no waiting window, because the answer
+             cannot change while we sit here. */
+          id: "big-loan",
+          kind: "condition",
+          condition: { kind: "balance", min: 600_000 },
+          nextYes: "send-structure",
+          nextNo: "exit-milestone",
+        },
+        send({
+          id: "send-structure",
+          label: "Structure conversation",
+          subject: "{{first_name}}, one thing worth checking at this size",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "On a loan this size, a quarter paid down is usually the point where the structure is worth a second look — offset, splits, and whether the rate you are on is still the one you would be offered today.",
+            "",
+            "Half an hour would cover it.",
+            "",
+            "{{broker_name}}",
+          ],
+          next: "exit-milestone",
+        }),
+        { id: "exit-milestone", kind: "exit", note: "Marked once per loan." },
       ],
     },
   },

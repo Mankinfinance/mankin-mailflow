@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { AutomationFlow, AutomationNode } from "@/lib/automations/types";
 import { describeTrigger } from "@/lib/automations/triggers";
+import { describeCondition } from "@/lib/automations/engine";
 import type { AutomationNodeStats } from "@/lib/db/repos";
 
 /**
@@ -27,6 +28,10 @@ export interface AutomationCanvasProps {
   entered: number;
   enteredThisMonth: number;
   stageLabel?: string;
+  /** Name of the form a signup trigger watches. */
+  formName?: string;
+  /** Team member names, so a broker condition reads as a person. */
+  brokerNames?: Record<string, string>;
 }
 
 export function AutomationCanvas({
@@ -36,6 +41,8 @@ export function AutomationCanvas({
   entered,
   enteredThisMonth,
   stageLabel,
+  formName,
+  brokerNames,
 }: AutomationCanvasProps) {
   const statsByNode = new Map(stats.map((s) => [s.nodeId, s]));
   const nodeById = new Map(flow.nodes.map((n) => [n.id, n]));
@@ -80,7 +87,7 @@ export function AutomationCanvas({
     >
       <div className="mx-auto flex w-full max-w-[680px] flex-col items-center">
         <TriggerCard
-          label={describeTrigger(flow.trigger, stageLabel)}
+          label={describeTrigger(flow.trigger, stageLabel, formName)}
           entered={entered}
           thisMonth={enteredThisMonth}
         />
@@ -91,6 +98,7 @@ export function AutomationCanvas({
             node={node}
             stats={statsByNode.get(node.id)}
             waiting={waitingByNode[node.id] ?? 0}
+            brokerNames={brokerNames}
           />
         ))}
 
@@ -104,6 +112,7 @@ export function AutomationCanvas({
                 nodes={branch(condition.nextNo)}
                 statsByNode={statsByNode}
                 waitingByNode={waitingByNode}
+                brokerNames={brokerNames}
               />
               <BranchColumn
                 label="YES"
@@ -111,6 +120,7 @@ export function AutomationCanvas({
                 nodes={branch(condition.nextYes)}
                 statsByNode={statsByNode}
                 waitingByNode={waitingByNode}
+                brokerNames={brokerNames}
               />
             </div>
           </div>
@@ -128,15 +138,22 @@ function NodeWithConnector({
   node,
   stats,
   waiting,
+  brokerNames,
 }: {
   node: AutomationNode;
   stats?: AutomationNodeStats;
   waiting: number;
+  brokerNames?: Record<string, string>;
 }) {
   return (
     <>
       <Connector />
-      <NodeCard node={node} stats={stats} waiting={waiting} />
+      <NodeCard
+        node={node}
+        stats={stats}
+        waiting={waiting}
+        brokerNames={brokerNames}
+      />
     </>
   );
 }
@@ -193,10 +210,12 @@ function NodeCard({
   node,
   stats,
   waiting,
+  brokerNames,
 }: {
   node: AutomationNode;
   stats?: AutomationNodeStats;
   waiting: number;
+  brokerNames?: Record<string, string>;
 }) {
   if (node.kind === "exit") {
     return (
@@ -231,7 +250,9 @@ function NodeCard({
         </span>
       </div>
       <div className="px-3 py-3">
-        <p className="text-[13px] font-semibold text-ink">{titleFor(node)}</p>
+        <p className="text-[13px] font-semibold text-ink">
+          {titleFor(node, brokerNames)}
+        </p>
         {node.kind === "send" && node.subject && (
           <p className="mono mt-0.5 truncate text-[11px] text-ink-mute">
             {node.subject}
@@ -239,7 +260,11 @@ function NodeCard({
         )}
         {node.kind === "condition" && (
           <p className="mt-0.5 text-[11.5px] text-ink-mute">
-            Waits up to {node.withinDays} days for an answer
+            {node.condition
+              ? /* Nothing to wait for — the contact's record answers it
+                   the moment the sequence reaches this step. */
+                "Answered from the contact's record"
+              : `Waits up to ${node.withinDays ?? 0} days for an answer`}
           </p>
         )}
 
@@ -263,12 +288,18 @@ function NodeCard({
   );
 }
 
-function titleFor(node: AutomationNode): string {
+function titleFor(
+  node: AutomationNode,
+  brokerNames?: Record<string, string>,
+): string {
   if (node.label) return node.label;
   if (node.kind === "delay") {
     return node.days === 1 ? "Wait 1 day" : `Wait ${node.days ?? 0} days`;
   }
   if (node.kind === "condition") {
+    if (node.condition) {
+      return describeCondition(node.condition, { brokers: brokerNames });
+    }
     return node.check === "clicked" ? "Clicked the link?" : "Opened the email?";
   }
   return node.id;
@@ -337,12 +368,14 @@ function BranchColumn({
   nodes,
   statsByNode,
   waitingByNode,
+  brokerNames,
 }: {
   label: string;
   tone: string;
   nodes: AutomationNode[];
   statsByNode: Map<string, AutomationNodeStats>;
   waitingByNode: Record<string, number>;
+  brokerNames?: Record<string, string>;
 }) {
   return (
     <div className="flex w-[314px] flex-col items-center">
@@ -359,6 +392,7 @@ function BranchColumn({
             node={node}
             stats={statsByNode.get(node.id)}
             waiting={waitingByNode[node.id] ?? 0}
+            brokerNames={brokerNames}
           />
         </div>
       ))}

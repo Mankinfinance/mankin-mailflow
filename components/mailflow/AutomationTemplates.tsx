@@ -6,10 +6,12 @@ import {
   CalendarCheck,
   Clock,
   Hourglass,
+  HandHeart,
   House,
   LayoutTemplate,
   PartyPopper,
   Search,
+  Tag,
   TrendingUp,
   Undo2,
 } from "lucide-react";
@@ -29,7 +31,9 @@ import { Eyebrow } from "./MailflowPage";
  * wired to a trigger the loan book can already answer. That is the
  * difference from a generic library: nothing in it is an abandoned cart
  * or a birthday, because a broker has neither — but they do have eight
- * hundred loans with anniversaries nobody is watching.
+ * hundred loans with anniversaries nobody is watching, and a quarter
+ * paid down is the milestone a birthday would have been if the
+ * commission file carried one.
  *
  * Each card states its trigger and its rough volume, so the decision to
  * turn one on is made with the consequence visible.
@@ -43,6 +47,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   clock: Clock,
   "party-popper": PartyPopper,
   "undo-2": Undo2,
+  "hand-heart": HandHeart,
+  tag: Tag,
 };
 
 export function AutomationTemplates({

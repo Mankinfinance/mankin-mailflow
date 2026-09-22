@@ -12,8 +12,12 @@ import { defaultAudienceFilter } from "@/lib/campaigns/types";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import type { AutomationRow, AutomationRunRow } from "@/lib/db/schema";
 import { AutomationFlowSchema } from "./types";
-import { nextAction, type RunPosition } from "./engine";
-import { evaluateTrigger } from "./triggers";
+import { nextAction, type ContactFacts, type RunPosition } from "./engine";
+import {
+  evaluateTrigger,
+  type SubmissionHit,
+  type TagHit,
+} from "./triggers";
 
 /**
  * The automation runner: enrol newly eligible contacts, then advance
@@ -28,6 +32,88 @@ import { evaluateTrigger } from "./triggers";
 /** Runs advanced per pass. Each may send, so this is the same Exchange
  *  rate consideration the campaign sender has. */
 const RUN_BUDGET = 80;
+
+/**
+ * Resolves a contact's current record for conditions that ask about
+ * them, loading the book at most once per tick and only if some flow
+ * actually asks.
+ *
+ * Most sequences branch on opens alone and need none of this, so paying
+ * for the book on every tick would be a cost with no reader. Equally,
+ * loading it per run would mean up to RUN_BUDGET reads of the same
+ * three tables in one pass.
+ */
+function contactFactsLoader() {
+  let loaded: Promise<{
+    settlements: Awaited<ReturnType<typeof listSettlements>>;
+    deals: Awaited<ReturnType<ReturnType<typeof getSalestrekkerClient>["listDeals"]>>;
+    tagsByEmail: Map<string, string[]>;
+  }> | null = null;
+
+  const load = () => {
+    loaded ??= (async () => {
+      const [settlements, deals, tagRows] = await Promise.all([
+        listSettlements(),
+        getSalestrekkerClient().listDeals(),
+        repos().contactTag.list(),
+      ]);
+      const tagsByEmail = new Map<string, string[]>();
+      for (const row of tagRows) {
+        const key = row.email.toLowerCase();
+        const list = tagsByEmail.get(key) ?? [];
+        list.push(row.tag.toLowerCase());
+        tagsByEmail.set(key, list);
+      }
+      return { settlements, deals, tagsByEmail };
+    })();
+    return loaded;
+  };
+
+  return async function factsFor(email: string): Promise<ContactFacts | null> {
+    const key = email.trim().toLowerCase();
+    const { settlements, deals, tagsByEmail } = await load();
+    const tags = tagsByEmail.get(key) ?? [];
+
+    /* Back-book first, the same precedence the subscriber list and the
+       audience resolver use — it is the record that carries the loan. */
+    const settlement = settlements.find(
+      (x) => x.email.trim().toLowerCase() === key,
+    );
+    if (settlement) {
+      return {
+        tags,
+        lenderCode: settlement.lenderCode || null,
+        currentBalance: settlement.currentBalance,
+        settlementDate: settlement.settlementDate || null,
+        brokerId: settlement.brokerId,
+      };
+    }
+
+    const deal = deals.find((x) => x.email.trim().toLowerCase() === key);
+    if (deal) {
+      return {
+        tags,
+        lenderCode: null,
+        currentBalance: null,
+        settlementDate: null,
+        brokerId: deal.brokerId,
+      };
+    }
+
+    /* Nowhere in the book. Tags alone are still answerable, so this is
+       a record rather than null — a "has tag" branch should not stop a
+       sequence just because the loan has since discharged. */
+    return tags.length > 0
+      ? {
+          tags,
+          lenderCode: null,
+          currentBalance: null,
+          settlementDate: null,
+          brokerId: null,
+        }
+      : null;
+  };
+}
 
 export interface AutomationTickResult {
   automations: number;
@@ -67,11 +153,12 @@ export async function tickAutomations(
   // someone already in a sequence should finish it even if the broker
   // stops new people entering.
   const due = await repos().automation.dueRuns(now, RUN_BUDGET);
+  const factsFor = contactFactsLoader();
   for (const run of due) {
     const automation = await repos().automation.get(run.automationId);
     if (!automation) continue;
     if (automation.status === "paused") continue;
-    const outcome = await advanceRun(automation, run, now);
+    const outcome = await advanceRun(automation, run, now, factsFor);
     result.advanced += 1;
     result.sent += outcome.sent;
     result.failed += outcome.failed;
@@ -103,6 +190,41 @@ async function enrol(
   ]);
   const suppressed = new Set(suppressedRows.map((r) => r.email));
 
+  /* Loaded per trigger kind rather than always: a sequence started by
+     a settlement anniversary has no use for the enquiry table, and an
+     enrolment pass runs for every live automation on every tick. */
+  let submissions: SubmissionHit[] | undefined;
+  let tagEvents: TagHit[] | undefined;
+
+  if (flow.data.trigger.kind === "form-submission") {
+    const rows = await repos().form.listSubmissions(
+      flow.data.trigger.formId,
+      1000,
+    );
+    submissions = rows.flatMap((r) =>
+      r.email
+        ? [
+            {
+              formId: r.formId,
+              email: r.email,
+              name: r.name,
+              submittedAt: r.submittedAt,
+              dealId: r.dealId,
+            },
+          ]
+        : [],
+    );
+  }
+
+  if (flow.data.trigger.kind === "tag-added") {
+    const rows = await repos().contactTag.list();
+    tagEvents = rows.map((r) => ({
+      email: r.email,
+      tag: r.tag,
+      addedAt: r.createdAt,
+    }));
+  }
+
   /* Merge fields come from the campaign audience resolver, so an
      automation email and a campaign email merge identically — one
      definition of what {{lender}} means, not two. */
@@ -111,6 +233,8 @@ async function enrol(
     settlements,
     deals,
     today: now,
+    submissions,
+    tagEvents,
     alreadyEnrolled,
     suppressed,
     fieldsForSettlement: (s) =>
@@ -172,6 +296,7 @@ async function advanceRun(
   automation: AutomationRow,
   run: AutomationRunRow,
   now: Date,
+  factsFor: (email: string) => Promise<ContactFacts | null>,
 ): Promise<AdvanceOutcome> {
   const outcome: AdvanceOutcome = { sent: 0, failed: 0, exited: 0 };
 
@@ -201,6 +326,14 @@ async function advanceRun(
   }
 
   const lastSend = await repos().automation.latestSendForRun(run.id);
+
+  /* Only resolved when the flow actually asks something about the
+     contact. A sequence that branches on opens alone should not make
+     the runner read the book. */
+  const asksAboutContact = flow.nodes.some(
+    (n) => n.kind === "condition" && n.condition,
+  );
+
   const position: RunPosition = {
     nodeId: run.currentNodeId,
     enteredNodeAt: run.nodeEnteredAt,
@@ -211,6 +344,7 @@ async function advanceRun(
           clickedAt: lastSend.clickedAt,
         }
       : null,
+    contact: asksAboutContact ? await factsFor(run.email) : null,
   };
 
   const action = nextAction(flow, position, now);
