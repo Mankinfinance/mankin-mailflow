@@ -93,8 +93,56 @@ the marketing account" and "this app can email as anyone in the firm".
 storage: the app runs, and every campaign, contact and tag resets on
 each redeploy. Fine for a look around, not for real sends.
 
-Both repos define the same tables, so decide which one runs migrations
-against a shared database before pointing the second at it.
+## Which repo owns the migrations
+
+**Mailflow runs them. LoanFlow must not.**
+
+Both repos define the same tables, which sounds like a conflict and is
+not one, because Mailflow's migration history is a strict superset of
+LoanFlow's:
+
+- `0000` through `0011` are **byte-identical in both repos** — Mailflow
+  was forked from LoanFlow and inherited them unchanged.
+- `0012` onward exists only in Mailflow: campaigns, automations, forms,
+  landing pages, templates, tags, segments, settings, media, surveys,
+  webhooks.
+- LoanFlow stops at `0011` and needs nothing beyond it.
+
+Drizzle records what it has applied in `__drizzle_migrations`, keyed on
+a hash of each file rather than its number. So pointing Mailflow at the
+database LoanFlow already migrated is safe: it recognises `0000`-`0011`
+as already applied, skips them, and applies `0012` onward. Running it
+the other way round does nothing useful, since LoanFlow has no
+migration the database is missing.
+
+### The thing that would break this
+
+If LoanFlow ever adds a migration of its own, it becomes `0012` there
+too — a different file sharing a number with Mailflow's `0012`. Drizzle
+would apply both, because the hashes differ, and the two repos' schema
+snapshots would then each describe a database that does not exist. The
+next `drizzle-kit generate` in either repo would be computed from the
+wrong starting point and emit a migration that fails or, worse, one
+that succeeds and drops something.
+
+So, once they share a database: **schema changes go in Mailflow**. If
+LoanFlow genuinely needs a new table, add it to Mailflow's schema and
+let Mailflow migrate it, or split the databases first.
+
+### Connecting it
+
+1. Add `DATABASE_URL` in Vercel (Secret) for the Mailflow project.
+2. Leave `MOCK_DB` unset. The repos use Postgres whenever a
+   `DATABASE_URL` is present; `MOCK_DB=true` force-mocks even when one
+   is, which is a testing lever rather than a production setting.
+3. Run `pnpm db:migrate` against that URL, from the Mailflow repo.
+4. Redeploy.
+
+Until step 3 runs, the app still starts: a query against a table that
+does not exist yet is caught and falls back to empty rather than
+erroring (see `isMissingRelation` in `lib/db/repos.ts`). That is a
+safety net for a half-migrated database, not a substitute for
+migrating.
 
 ## Azure
 
