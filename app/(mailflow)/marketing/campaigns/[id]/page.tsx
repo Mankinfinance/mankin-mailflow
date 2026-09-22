@@ -5,6 +5,10 @@ import { MailflowContent, PageTitle } from "@/components/mailflow/MailflowPage";
 import { MailflowEditor } from "@/components/mailflow/MailflowEditor";
 import { CampaignReport } from "@/components/mailflow/CampaignReport";
 import { FollowUpButton } from "@/components/mailflow/FollowUpButton";
+import { ClickMap } from "@/components/mailflow/ClickMap";
+import { DomainBreakdown } from "@/components/mailflow/DomainBreakdown";
+import { buildClickMap } from "@/lib/campaigns/click-map";
+import { buildDomainBreakdown } from "@/lib/campaigns/domains";
 import { CampaignControls } from "@/components/campaigns/CampaignControls";
 import type { CurvePoint } from "@/components/mailflow/EngagementCurve";
 import { currentBroker } from "@/lib/auth/current-broker";
@@ -112,6 +116,15 @@ export default async function MarketingCampaignPage({
   ]);
 
   const curve = buildCurve(recipients, campaign.startedAt);
+
+  /* Both built from data already in hand — the recipient rows and the
+     per-URL click counts the report was loading anyway. */
+  const clickMap = buildClickMap({
+    body: campaign.body,
+    clicks: links,
+    delivered: stats.sent,
+  });
+  const domains = buildDomainBreakdown(recipients);
   const problems = recipients.filter(
     (r) => r.status === "failed" || r.status === "skipped",
   );
@@ -143,6 +156,12 @@ export default async function MarketingCampaignPage({
         links={links}
         problems={problems}
         hoursSinceSend={hoursSinceSend}
+        insights={
+          <>
+            <ClickMap map={clickMap} delivered={stats.sent} />
+            <DomainBreakdown breakdown={domains} />
+          </>
+        }
       />
       <div className="mt-3.5">
         <FollowUpButton

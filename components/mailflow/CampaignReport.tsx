@@ -20,6 +20,12 @@ export interface CampaignReportProps {
   stats: CampaignStats;
   curve: CurvePoint[];
   links: CampaignLinkClickRow[];
+  /**
+   * The click map and provider breakdown, rendered here rather than
+   * after the whole report — they belong with the engagement figures
+   * they explain, above the list of what failed to send.
+   */
+  insights?: React.ReactNode;
   problems: CampaignRecipientRow[];
   /** Null while a send is still draining. */
   hoursSinceSend: number | null;
@@ -34,12 +40,12 @@ export function CampaignReport({
   stats,
   curve,
   links,
+  insights,
   problems,
   hoursSinceSend,
 }: CampaignReportProps) {
   const failed = problems.filter((p) => p.status === "failed").length;
   const skipped = problems.filter((p) => p.status === "skipped").length;
-  const totalLinkClicks = links.reduce((sum, l) => sum + l.clicks, 0);
 
   return (
     <div className="space-y-3.5">
@@ -122,43 +128,7 @@ export function CampaignReport({
         </Card>
       )}
 
-      {links.length > 0 && (
-        <Card>
-          <Eyebrow className="mb-2.5">Links clicked</Eyebrow>
-          <div className="space-y-2">
-            {links.map((link) => {
-              const share = totalLinkClicks
-                ? Math.round((link.clicks / totalLinkClicks) * 100)
-                : 0;
-              return (
-                <div key={link.id} className="flex items-center gap-3">
-                  <span className="mono min-w-0 flex-1 truncate text-[11px] text-ink-soft">
-                    {link.url.replace(/^https?:\/\//, "")}
-                  </span>
-                  <span className="w-8 shrink-0 text-right text-[13px] font-semibold tabular-nums text-ink">
-                    {link.clicks}
-                  </span>
-                  <span
-                    className="h-1.5 w-[120px] shrink-0 overflow-hidden rounded-full"
-                    style={{ backgroundColor: "#eef1f0" }}
-                  >
-                    <span
-                      className="block h-full rounded-full"
-                      style={{
-                        width: `${share}%`,
-                        backgroundColor: "var(--color-series-2)",
-                      }}
-                    />
-                  </span>
-                  <span className="w-7 shrink-0 text-right text-[11px] tabular-nums text-ink-mute">
-                    {share}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
+      {insights}
 
       {problems.length > 0 && (
         <Card className="max-w-[560px]">
