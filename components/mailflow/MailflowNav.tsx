@@ -6,7 +6,6 @@ import {
   LayoutTemplate,
   Mail,
   PanelsTopLeft,
-  Plug,
   ClipboardList,
   Settings,
   Users,
@@ -38,7 +37,6 @@ export type MailflowNavKey =
   | "landing-pages"
   | "templates"
   | "files"
-  | "integrations"
   | "settings";
 
 interface NavEntry {
@@ -47,7 +45,6 @@ interface NavEntry {
   href: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   /** Destinations the design specifies but that have no backend yet. */
-  planned?: boolean;
 }
 
 const NAV: NavEntry[] = [
@@ -59,7 +56,6 @@ const NAV: NavEntry[] = [
   { key: "landing-pages", label: "Landing pages", href: "/marketing/landing-pages", icon: PanelsTopLeft },
   { key: "templates", label: "Templates", href: "/marketing/templates", icon: LayoutTemplate },
   { key: "files", label: "File manager", href: "/marketing/files", icon: FolderOpen },
-  { key: "integrations", label: "Integrations", href: "/marketing/integrations", icon: Plug, planned: true },
   { key: "settings", label: "Settings", href: "/marketing/settings", icon: Settings },
 ];
 
@@ -116,38 +112,10 @@ export function MailflowNav({ active, footer }: MailflowNavProps) {
               ? "bg-brand-soft font-semibold text-brand"
               : "text-ink-mute hover:bg-paper-warm",
           );
-          const inner = (
-            <>
-              <Icon size={14} strokeWidth={1.5} className="shrink-0" />
-              <span className="flex-1 truncate">{item.label}</span>
-              {item.planned && (
-                <span
-                  title="Designed, not yet built"
-                  className="h-1 w-1 shrink-0 rounded-full bg-ink-faint"
-                />
-              )}
-            </>
-          );
-
-          /* A planned item has no page behind it, so it is deliberately
-             not a link. Rendering it as one sent brokers to a 404 and
-             made the whole module look broken — a greyed row that says
-             "not yet" is honest; a dead link is not. */
-          if (item.planned) {
-            return (
-              <span
-                key={item.key}
-                title="Designed, not yet built"
-                className={cn(className, "cursor-default opacity-55")}
-              >
-                {inner}
-              </span>
-            );
-          }
-
           return (
             <Link key={item.key} href={item.href} className={className}>
-              {inner}
+              <Icon size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="flex-1 truncate">{item.label}</span>
             </Link>
           );
         })}
