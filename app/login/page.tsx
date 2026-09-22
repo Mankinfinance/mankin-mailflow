@@ -1,45 +1,58 @@
-import { LoanflowLogo } from "@/components/brand/LoanflowLogo";
+import { MailflowLogo } from "@/components/brand/MailflowLogo";
 import { Button } from "@/components/ui/button";
 import { signIn } from "@/auth";
+import { authBypassEnabled } from "@/lib/auth/skip-auth";
 
 export const metadata = {
-  title: "Sign in · LoanFlow",
+  title: "Sign in · Mailflow",
 };
 
 /**
- * Broker SSO sign-in. Calls Auth.js signIn() server action which kicks
- * off the Microsoft Entra ID OAuth flow. Customers don't see this — they
- * use the /portal/[token] route with SMS OTP.
+ * Mailflow's front door.
  *
- * While SKIP_AUTH=true, the proxy's authorized() returns true so the
- * dashboard never redirects here. To activate real SSO: flip SKIP_AUTH
- * to false and fill the AUTH_MICROSOFT_ENTRA_ID_* envs.
+ * This deployment is Mailflow and nothing else, so the page says so.
+ * It arrived here as a copy of LoanFlow's sign-in and kept LoanFlow's
+ * logo, wording and — more expensively — LoanFlow's post-sign-in
+ * destination, which does not exist in this app. A broker who signed in
+ * successfully landed on a 404.
+ *
+ * Customers never see this. They arrive through a tracking or
+ * unsubscribe link, which carries its own signed token.
  */
 export default function LoginPage() {
-  const skipAuth = process.env.SKIP_AUTH !== "false";
+  /* The shared, hardened gate: SKIP_AUTH must be exactly "true" AND the
+     build must not be a production one. The previous check here was
+     `SKIP_AUTH !== "false"`, which failed open — with the variable
+     unset, as it is on every deployment, it rendered a "sign-in is
+     bypassed" notice on the live sign-in page. */
+  const bypassed = authBypassEnabled();
 
   return (
     <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col justify-center px-8 py-16">
       <div className="flex justify-center">
-        <LoanflowLogo size="lg" mark />
+        <MailflowLogo size="lg" mark />
       </div>
       <h1
         className="mt-8 text-center text-[32px] font-medium leading-[1.1] tracking-tight text-brand"
         style={{ fontFamily: "var(--font-display)" }}
       >
-        Sign in to LoanFlow<span className="text-ink-mute">.</span>
+        Sign in to Mailflow<span className="text-ink-mute">.</span>
       </h1>
       <div className="mt-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-brand/70">
-        Pipeline · Settled
+        Campaigns · Sequences
       </div>
       <p className="mt-4 text-center text-[14px] leading-[1.6] text-ink-soft">
-        Mankin Finance brokers and loan associates only. Customers head to the link in your email or SMS.
+        Mankin Finance brokers and loan associates only. Customers reach their
+        preferences through the link at the bottom of any email we send.
       </p>
 
       <form
         action={async () => {
           "use server";
-          await signIn("microsoft-entra-id", { redirectTo: "/dashboard" });
+          /* Mailflow has no /dashboard — its home is the marketing
+             dashboard. Sending brokers to LoanFlow's route meant a
+             successful sign-in ended on a 404. */
+          await signIn("microsoft-entra-id", { redirectTo: "/marketing" });
         }}
         className="mt-10"
       >
@@ -48,11 +61,11 @@ export default function LoginPage() {
         </Button>
       </form>
 
-      {skipAuth && (
+      {bypassed && (
         <div className="mt-6 rounded-lg border border-warn-soft bg-warn-soft/60 px-4 py-3 text-[12px] leading-[1.5] text-warn-ink">
-          <b>SKIP_AUTH is true</b> — sign-in is bypassed in dev. Flip it in{" "}
-          <code className="rounded bg-surface px-1 py-px text-[11.5px]">web/.env.local</code>
-          {" "}and fill the Entra ID env vars to activate real SSO.
+          <b>SKIP_AUTH is true</b> — sign-in is bypassed locally. Remove it from{" "}
+          <code className="rounded bg-surface px-1 py-px text-[11.5px]">.env.local</code>
+          {" "}to exercise the real Microsoft flow.
         </div>
       )}
     </main>

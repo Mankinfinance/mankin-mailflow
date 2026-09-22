@@ -24,5 +24,7 @@ export async function signOutAction(): Promise<void> {
  * carrying the Microsoft access token.
  */
 export async function reauthMicrosoftAction(): Promise<void> {
-  await signIn("microsoft-entra-id", { redirectTo: "/dashboard/setup" });
+  /* LoanFlow's post-sign-in route. Mailflow's home is the marketing
+     dashboard; the old one 404s here. */
+  await signIn("microsoft-entra-id", { redirectTo: "/marketing" });
 }

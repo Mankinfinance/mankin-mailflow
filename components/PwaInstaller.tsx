@@ -19,7 +19,7 @@ type InstallEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-const DISMISS_KEY = "loanflow.pwa.dismissed";
+const DISMISS_KEY = "mailflow.pwa.dismissed";
 
 export function PwaInstaller() {
   const [prompt, setPrompt] = React.useState<InstallEvent | null>(null);
@@ -103,12 +103,12 @@ export function PwaInstaller() {
         "text-[12.5px] text-ink",
       )}
       role="dialog"
-      aria-label="Install LoanFlow"
+      aria-label="Install Mailflow"
     >
       <span aria-hidden>📲</span>
       {prompt ? (
         <>
-          <span className="font-semibold">Install LoanFlow</span>
+          <span className="font-semibold">Install Mailflow</span>
           <span className="text-ink-mute">for one-tap access</span>
           <button
             type="button"

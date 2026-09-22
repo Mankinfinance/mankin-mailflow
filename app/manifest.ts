@@ -13,10 +13,12 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "LoanFlow",
-    short_name: "LoanFlow",
-    description: "Broker pipeline and customer document portal for Mankin Finance.",
-    start_url: "/dashboard",
+    name: "Mailflow",
+    short_name: "Mailflow",
+    description: "Email marketing for Mankin Finance, run off the loan book.",
+    /* Mailflow has no /dashboard — that is LoanFlow's route, and an
+       installed app opening it landed on a 404. */
+    start_url: "/marketing",
     scope: "/",
     display: "standalone",
     orientation: "any",
@@ -31,21 +33,23 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-      { src: "/icons/loanflow-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
     ],
+    /* Both of LoanFlow's shortcuts pointed at routes this app does not
+       have, so a long-press on the installed icon offered two dead
+       ends. These are the two screens worth a shortcut here. */
     shortcuts: [
       {
-        name: "Today's queue",
-        short_name: "Today",
-        description: "Jump straight to today's work",
-        url: "/dashboard/today",
+        name: "Campaigns",
+        short_name: "Campaigns",
+        description: "What has gone out, and what is drafted",
+        url: "/marketing/campaigns",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
       },
       {
-        name: "CX manager",
-        short_name: "CX",
-        description: "Customer retention and anniversaries",
-        url: "/cx",
+        name: "Subscribers",
+        short_name: "Contacts",
+        description: "The contact list and who is engaged",
+        url: "/marketing/subscribers",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
       },
     ],

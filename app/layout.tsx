@@ -27,9 +27,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LoanFlow",
+  title: "Mailflow",
   description:
-    "LoanFlow - broker dashboard and customer document portal for Mankin Finance.",
+    "Mailflow - email marketing for Mankin Finance, run off the loan book.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -41,12 +41,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "LoanFlow",
+    title: "Mailflow",
   },
 };
 
 /* PWA theme + colour scheme - keeps the iOS status bar + Android nav
-   bar tinted to brand navy when LoanFlow is installed to the home
+   bar tinted to brand navy when Mailflow is installed to the home
    screen, and prevents the dashboard from zooming on text-input focus. */
 export const viewport: Viewport = {
   themeColor: "#1c2566",

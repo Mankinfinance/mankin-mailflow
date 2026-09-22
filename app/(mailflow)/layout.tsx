@@ -20,8 +20,12 @@ export default async function MailflowLayout({
   children: React.ReactNode;
 }) {
   const broker = await currentBroker();
-  if (await isUserDisabled(broker.id)) redirect("/access-revoked");
-  if (!(await canAccessAdmin(broker.id))) redirect("/dashboard");
+  /* Both destinations were LoanFlow's — `/access-revoked` and
+     `/dashboard` — and neither route exists here, so being turned away
+     from Mailflow produced a 404 that read as a broken product rather
+     than a closed door. */
+  if (await isUserDisabled(broker.id)) redirect("/no-access");
+  if (!(await canAccessAdmin(broker.id))) redirect("/no-access");
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-paper">{children}</div>

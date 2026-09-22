@@ -55,11 +55,11 @@ export async function GET(req: Request) {
   const from = "michael@mankinfinance.com";
   const payload = {
     message: {
-      subject: "[LoanFlow diagnostic] Graph mail test",
+      subject: "[Mailflow diagnostic] Graph mail test",
       body: {
         contentType: "Text",
         content:
-          "This is an automated test from the LoanFlow /api/health/graph-test endpoint.\n\n" +
+          "This is an automated test from the Mailflow /api/health/graph-test endpoint.\n\n" +
           "If you received this, Graph app-only Mail.Send is working correctly.\n\n" +
           `Timestamp: ${new Date().toISOString()}`,
       },
