@@ -144,6 +144,28 @@ erroring (see `isMissingRelation` in `lib/db/repos.ts`). That is a
 safety net for a half-migrated database, not a substitute for
 migrating.
 
+## Sign in from the production domain, not a deployment URL
+
+Every Vercel deployment gets its own hostname —
+`mankin-mailflow-<hash>-mankin-finance.vercel.app` — and the hash
+changes on every deploy. Clicking through from the Vercel dashboard
+lands you on one of those.
+
+Auth.js builds its callback URL from the host the request arrived on,
+so signing in from a deployment URL asks Microsoft to redirect back to
+that hostname, which is not registered in Entra and could never be:
+there is a new one every deploy. The result is `AADSTS50011`, which
+reads as "the redirect URI is wrong" when the redirect URI is fine and
+the *starting* URL was wrong.
+
+The tell is a hash in the hostname. `mankin-mailflow.vercel.app` with
+nothing between the name and `.vercel.app` is the one that works.
+
+To remove the trap rather than remember it, set `AUTH_URL` to
+`https://mankin-mailflow.vercel.app` in Vercel. Auth.js then always
+builds callbacks against that host whatever the request arrived on, so
+signing in from a deployment URL redirects to production and succeeds.
+
 ## Azure
 
 The sign-in app registration needs Mailflow's callback in its redirect
@@ -177,7 +199,7 @@ single argument for Pro.
 
 - **404 on every path, Ready, fast build** → Framework Preset is not Next.js
 - **Wrong product entirely** → the project is building the other repo; check the commit hash
-- **`AADSTS50011`** → redirect URI missing or mistyped in the Entra app
+- **`AADSTS50011`** → redirect URI missing or mistyped in the Entra app — or, more often, you started from a deployment URL rather than the production domain. Check the hostname in the error for a hash.
 - **`AADSTS7000215`** → wrong client secret, usually the Secret ID copied instead of the Value
 - **500 or an application error** → an env var is missing; check Runtime Logs
 - **A warning that `middleware.ts` cannot be found** → a false positive. Next 16 renamed middleware to `proxy.ts`; ignore it.
