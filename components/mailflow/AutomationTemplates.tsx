@@ -8,6 +8,7 @@ import {
   Hourglass,
   HandHeart,
   House,
+  MessageSquareQuote,
   LayoutTemplate,
   PartyPopper,
   Search,
@@ -49,6 +50,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   "undo-2": Undo2,
   "hand-heart": HandHeart,
   tag: Tag,
+  "message-square-quote": MessageSquareQuote,
 };
 
 export function AutomationTemplates({

@@ -1512,3 +1512,93 @@ export const mediaFiles = pgTable(
 
 export type MediaFileRow = typeof mediaFiles.$inferSelect;
 export type NewMediaFile = typeof mediaFiles.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* surveys — asking a client what they thought                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A survey. Questions, copy and the thank-you live in `config` as JSONB,
+ * parsed through SurveyConfigSchema on read — same shape as forms and
+ * landing pages, for the same reason: a question kind can be added
+ * without a migration, and every field has a default so old rows keep
+ * parsing.
+ *
+ * `sent` is a counter rather than a join, because the only question
+ * asked of it is the response rate, and that is a division.
+ */
+export const surveys = pgTable(
+  "surveys",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+
+    name: text("name").notNull(),
+    /** draft | live | closed */
+    status: text("status").notNull().default("draft"),
+    /** SurveyConfig payload. */
+    config: jsonb("config").notNull(),
+
+    createdBy: text("created_by").notNull(),
+    /** How many invitations have gone out, for the response rate. */
+    sent: integer("sent").notNull().default(0),
+  },
+  (t) => [index("surveys_status_idx").on(t.status)],
+);
+
+export type SurveyRow = typeof surveys.$inferSelect;
+export type NewSurveyRow = typeof surveys.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* survey_responses — one person's answers                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One response. Unique on (survey, email): a client answers a given
+ * survey once, and a second submission replaces the first rather than
+ * counting twice — someone who re-reads the email and answers again has
+ * changed their mind, not doubled their opinion.
+ *
+ * The email is recorded because we already know who we asked. That is
+ * the difference between this and a form: a survey invitation carries a
+ * signed token naming its recipient, so an answer arrives attributable
+ * without anyone being asked to identify themselves. It also means a
+ * detractor can be rung up, which is the entire point of asking.
+ */
+export const surveyResponses = pgTable(
+  "survey_responses",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    surveyId: uuid("survey_id").notNull(),
+
+    /** Lower-cased address of whoever was asked. */
+    email: text("email").notNull(),
+    /** Display name at invitation time. */
+    name: text("name").notNull().default(""),
+
+    /** SurveyAnswers payload, keyed by question id. */
+    answers: jsonb("answers").$type<Record<string, number | string>>().notNull(),
+
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+
+    /** Campaign or automation the invitation came from, when it came
+     *  from one. Null for a link sent by hand. */
+    sourceKind: text("source_kind"),
+    sourceId: text("source_id"),
+  },
+  (t) => [
+    index("survey_responses_survey_idx").on(t.surveyId),
+    index("survey_responses_submitted_at_idx").on(t.submittedAt),
+    uniqueIndex("survey_responses_survey_email_idx").on(t.surveyId, t.email),
+  ],
+);
+
+export type SurveyResponseRow = typeof surveyResponses.$inferSelect;
+export type NewSurveyResponse = typeof surveyResponses.$inferInsert;

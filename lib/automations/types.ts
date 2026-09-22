@@ -69,7 +69,16 @@ export type Trigger = z.infer<typeof TriggerSchema>;
 /* Nodes                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export const NodeKindSchema = z.enum(["delay", "send", "condition", "exit"]);
+export const NodeKindSchema = z.enum([
+  "delay",
+  "send",
+  "condition",
+  "exit",
+  /** Sends a survey invitation carrying a signed, per-recipient link. */
+  "survey",
+  /** Mailchimp's "50/50 split" — two paths by share, not by question. */
+  "split",
+]);
 export type NodeKind = z.infer<typeof NodeKindSchema>;
 
 /**
@@ -136,6 +145,19 @@ export const AutomationNodeSchema = z.object({
   condition: DataConditionSchema.optional(),
   nextYes: z.string().nullable().optional(),
   nextNo: z.string().nullable().optional(),
+
+  /** survey: which survey the invitation is for. */
+  surveyId: z.string().optional(),
+
+  /**
+   * split: share of contacts taking the `nextYes` path, 1-99.
+   *
+   * Assigned by hashing the contact's address with the node id rather
+   * than at random, so a run that is retried after a crash takes the
+   * same path it took the first time. A random draw would re-roll on
+   * every retry and could send one person down both branches.
+   */
+  splitPercent: z.number().int().min(1).max(99).optional(),
 
   /** exit: why the sequence ends here, shown on the canvas. */
   note: z.string().optional(),
@@ -655,6 +677,79 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           next: "exit-milestone",
         }),
         { id: "exit-milestone", kind: "exit", note: "Marked once per loan." },
+      ],
+    },
+  },
+
+  {
+    id: "settlement-survey",
+    name: "Ask how it went",
+    description:
+      "Sends the recommend question a fortnight after settlement, and nudges once.",
+    category: "Anniversary",
+    icon: "message-square-quote",
+    volume: "Every settlement",
+    flow: {
+      /* Two weeks, not two days: soon enough that the detail is fresh,
+         late enough that the relief of settling is not doing the
+         answering for them. */
+      trigger: { kind: "settlement-anniversary", months: 1 },
+      entryNodeId: "ask",
+      nodes: [
+        {
+          id: "ask",
+          kind: "survey",
+          label: "How did we do?",
+          /* Blank on purpose, like the form and tag templates — which
+             survey this asks is the broker's to choose, and
+             validateFlow refuses to let it go live until they have. */
+          surveyId: "",
+          subject: "{{first_name}}, how did we do?",
+          body: [
+            "Hi {{first_name}},",
+            "",
+            "Now your loan has settled I would like to know how the whole thing felt from your side — the good and the parts that were not.",
+            "",
+            "Two questions, about a minute:",
+            "",
+            "{{survey_link}}",
+            "",
+            "It comes straight to me.",
+            "",
+            "{{broker_name}}",
+          ].join("\n"),
+          next: "wait-7",
+        },
+        { id: "wait-7", kind: "delay", label: "Wait a week", days: 7, next: "opened" },
+        {
+          id: "opened",
+          kind: "condition",
+          label: "Opened it?",
+          check: "opened",
+          withinDays: 7,
+          nextYes: "exit-survey",
+          nextNo: "nudge",
+        },
+        {
+          id: "nudge",
+          kind: "survey",
+          label: "One nudge",
+          surveyId: "",
+          subject: "{{first_name}}, one minute?",
+          body: [
+            "Hi {{first_name}},",
+            "",
+            "I wrote last week asking how your loan went. If it got buried, here it is again — two questions, and it genuinely does get read.",
+            "",
+            "{{survey_link}}",
+            "",
+            "If you would rather not, that is completely fine and I will leave it there.",
+            "",
+            "{{broker_name}}",
+          ].join("\n"),
+          next: "exit-survey",
+        },
+        { id: "exit-survey", kind: "exit", note: "Asked twice, then left alone." },
       ],
     },
   },

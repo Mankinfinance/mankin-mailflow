@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   Mail,
+  MessageSquareQuote,
   PanelsTopLeft,
   ClipboardList,
   Settings,
@@ -34,6 +35,7 @@ export type MailflowNavKey =
   | "campaigns"
   | "automations"
   | "forms"
+  | "surveys"
   | "landing-pages"
   | "templates"
   | "files"
@@ -53,6 +55,14 @@ const NAV: NavEntry[] = [
   { key: "campaigns", label: "Campaigns", href: "/marketing/campaigns", icon: Mail },
   { key: "automations", label: "Automations", href: "/marketing/automations", icon: Workflow },
   { key: "forms", label: "Forms", href: "/marketing/forms", icon: ClipboardList },
+  /* Next to Forms because both are things a client fills in, and a
+     broker looking for one will look near the other. */
+  {
+    key: "surveys",
+    label: "Surveys",
+    href: "/marketing/surveys",
+    icon: MessageSquareQuote,
+  },
   { key: "landing-pages", label: "Landing pages", href: "/marketing/landing-pages", icon: PanelsTopLeft },
   { key: "templates", label: "Templates", href: "/marketing/templates", icon: LayoutTemplate },
   { key: "files", label: "File manager", href: "/marketing/files", icon: FolderOpen },

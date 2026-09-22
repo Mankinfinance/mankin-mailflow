@@ -47,6 +47,12 @@ export interface RunPosition {
    * be found in it — discharged, or the enquiry never became a deal.
    */
   contact?: ContactFacts | null;
+  /**
+   * Stable per-contact string a split hashes on — their address in
+   * practice. Passing it in rather than reading it keeps the engine
+   * pure and makes the split's assignment testable.
+   */
+  splitKey?: string;
 }
 
 export type Action =
@@ -54,6 +60,21 @@ export type Action =
   | { type: "wait"; nodeId: string; until: Date }
   /** Send this email, then move to `thenNodeId` (null ends the run). */
   | { type: "send"; nodeId: string; subject: string; body: string; thenNodeId: string | null }
+  /**
+   * Send a survey invitation, then move to `thenNodeId`.
+   *
+   * Separate from "send" because the body needs a signed per-recipient
+   * link merged into it, which the engine cannot mint — signing is
+   * async and server-only, and the engine is neither.
+   */
+  | {
+      type: "survey";
+      nodeId: string;
+      surveyId: string;
+      subject: string;
+      body: string;
+      thenNodeId: string | null;
+    }
   /** A condition resolved; continue at `nodeId`. */
   | { type: "move"; nodeId: string; because: "yes" | "no" }
   /** The sequence is over. */
@@ -114,6 +135,44 @@ export function nextAction(
         subject: node.subject,
         body: node.body,
         thenNodeId: node.next ?? null,
+      };
+    }
+
+    case "survey": {
+      if (!node.surveyId) {
+        return {
+          type: "broken",
+          nodeId: node.id,
+          reason: "Survey step has no survey chosen",
+        };
+      }
+      if (!node.subject?.trim() || !node.body?.trim()) {
+        return {
+          type: "broken",
+          nodeId: node.id,
+          reason: "Survey step has no subject or body",
+        };
+      }
+      return {
+        type: "survey",
+        nodeId: node.id,
+        surveyId: node.surveyId,
+        subject: node.subject,
+        body: node.body,
+        thenNodeId: node.next ?? null,
+      };
+    }
+
+    case "split": {
+      const share = node.splitPercent ?? 50;
+      const target = splitSide(position.splitKey ?? "", node.id, share)
+        ? node.nextYes
+        : node.nextNo;
+      if (!target) return { type: "exit", nodeId: node.id, note: null };
+      return {
+        type: "move",
+        nodeId: target,
+        because: target === node.nextYes ? "yes" : "no",
       };
     }
 
@@ -316,6 +375,36 @@ function listOf(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
 }
 
+/**
+ * Which side of a split a contact falls on.
+ *
+ * A deterministic hash of their address and the node id, so the answer
+ * is the same every time it is asked. That matters more than it looks:
+ * the runner may re-evaluate a node after a crash, and a random draw
+ * would re-roll — giving the same person a different variant on the
+ * retry, or both.
+ *
+ * The node id is mixed in so two splits in one flow do not send the
+ * same contact down the same side twice, which would make a
+ * second-stage split useless.
+ *
+ * FNV-1a: not cryptographic, but a split does not need to resist an
+ * adversary — it needs to spread evenly and never change its mind.
+ */
+export function splitSide(
+  key: string,
+  nodeId: string,
+  percent: number,
+): boolean {
+  let hash = 0x811c9dc5;
+  const input = `${key}:${nodeId}`;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % 100 < percent;
+}
+
 /** Whole months between a settlement and `today`. */
 function monthsSince(isoDate: string, today: Date): number | null {
   const from = new Date(isoDate);
@@ -361,7 +450,11 @@ export function reachableNodes(flow: AutomationFlow): AutomationNode[] {
     if (!node) return;
     seen.add(id);
     out.push(node);
-    if (node.kind === "condition") {
+    /* Splits branch on nextYes/nextNo exactly as conditions do, so
+       they walk the same way. Following `next` instead left both arms
+       of every split unreachable, which validateFlow then reported as
+       orphaned steps. */
+    if (node.kind === "condition" || node.kind === "split") {
       walk(node.nextNo);
       walk(node.nextYes);
     } else {
@@ -402,6 +495,31 @@ export function validateFlow(flow: AutomationFlow): string[] {
     if (node.kind === "send" && (!node.subject?.trim() || !node.body?.trim())) {
       problems.push(`"${node.label ?? node.id}" has no subject or body yet.`);
     }
+    if (node.kind === "survey") {
+      if (!node.surveyId?.trim()) {
+        problems.push(
+          `"${node.label ?? node.id}" has no survey chosen yet.`,
+        );
+      }
+      if (!node.subject?.trim() || !node.body?.trim()) {
+        problems.push(
+          `"${node.label ?? node.id}" has no subject or body yet.`,
+        );
+      }
+      if (node.body && !node.body.includes("{{survey_link}}")) {
+        /* Without the link the invitation is an email asking someone to
+           answer a survey with no way to answer it. */
+        problems.push(
+          `"${node.label ?? node.id}" needs {{survey_link}} in its body.`,
+        );
+      }
+    }
+    if (node.kind === "split" && (!node.nextYes || !node.nextNo)) {
+      /* A split with one arm is a delay that looks like a test. */
+      problems.push(
+        `"${node.label ?? node.id}" is a split with only one path.`,
+      );
+    }
     if (node.kind === "condition") {
       /* Neither kind of question set. Worth its own message: the
          engine would otherwise fall through to reading `check`, which
@@ -418,6 +536,12 @@ export function validateFlow(flow: AutomationFlow): string[] {
       if (node.nextNo && !ids.has(node.nextNo)) {
         problems.push(`A condition points at a step that no longer exists.`);
       }
+    } else if (node.kind === "split") {
+      for (const arm of [node.nextYes, node.nextNo]) {
+        if (arm && !ids.has(arm)) {
+          problems.push(`A split points at a step that no longer exists.`);
+        }
+      }
     } else if (node.next && !ids.has(node.next)) {
       problems.push(`"${node.label ?? node.id}" points at a step that no longer exists.`);
     }
@@ -431,7 +555,12 @@ export function validateFlow(flow: AutomationFlow): string[] {
     );
   }
 
-  const sends = flow.nodes.filter((n) => n.kind === "send").length;
+  /* A survey step sends an email too — an invitation carrying the
+     response link — so a survey-only sequence is a sending sequence.
+     Counting only "send" nodes refused to let one go live. */
+  const sends = flow.nodes.filter(
+    (n) => n.kind === "send" || n.kind === "survey",
+  ).length;
   if (sends === 0) {
     problems.push("The sequence never sends anything.");
   }

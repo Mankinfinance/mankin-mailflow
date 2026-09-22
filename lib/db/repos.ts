@@ -85,6 +85,12 @@ import {
   type MediaFileRow,
   type NewMediaFile,
   type NewAudienceSegment,
+  surveys,
+  surveyResponses,
+  type SurveyRow,
+  type NewSurveyRow,
+  type SurveyResponseRow,
+  type NewSurveyResponse,
 } from "./schema";
 import type { Deal } from "@/lib/clients/salestrekker/types";
 import { DealSchema } from "@/lib/clients/salestrekker/types";
@@ -554,6 +560,34 @@ export interface MediaFileRepo {
   totalBytes(): Promise<number>;
 }
 
+export interface SurveyRepo {
+  create(row: NewSurveyRow): Promise<SurveyRow>;
+  get(id: string): Promise<SurveyRow | null>;
+  list(filter?: { statuses?: string[] }): Promise<SurveyRow[]>;
+  update(id: string, patch: Partial<NewSurveyRow>): Promise<void>;
+  remove(id: string): Promise<void>;
+  /** Bumped per invitation sent, for the response rate. */
+  countSent(id: string, by: number): Promise<void>;
+
+  /**
+   * Record a response. Replaces any earlier one from the same address:
+   * somebody who answers twice has changed their mind, not doubled
+   * their opinion.
+   */
+  saveResponse(row: NewSurveyResponse): Promise<void>;
+  listResponses(
+    surveyId: string,
+    limit?: number,
+  ): Promise<SurveyResponseRow[]>;
+  /** Whether this address has already answered, for the response page. */
+  findResponse(
+    surveyId: string,
+    email: string,
+  ): Promise<SurveyResponseRow | null>;
+  /** Response counts per survey, for the list. */
+  responseCounts(): Promise<Record<string, number>>;
+}
+
 export interface RepoBundle {
   audit: AuditRepo;
   portalTokens: PortalTokenRepo;
@@ -578,6 +612,7 @@ export interface RepoBundle {
   segment: AudienceSegmentRepo;
   settings: MailflowSettingsRepo;
   media: MediaFileRepo;
+  survey: SurveyRepo;
 }
 
 /** Zeroed stats, used when the campaign tables aren't there yet. */
@@ -2713,6 +2748,124 @@ function realRepos(): RepoBundle {
         }
       },
     },
+    survey: {
+      async create(row) {
+        const db = getDb();
+        const [created] = await db.insert(surveys).values(row).returning();
+        return created;
+      },
+      async get(id) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(surveys)
+            .where(eq(surveys.id, id))
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async list(filter = {}) {
+        const db = getDb();
+        try {
+          const where = filter.statuses?.length
+            ? inArray(surveys.status, filter.statuses)
+            : undefined;
+          return await db
+            .select()
+            .from(surveys)
+            .where(where)
+            .orderBy(desc(surveys.updatedAt));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async update(id, patch) {
+        const db = getDb();
+        await db
+          .update(surveys)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(eq(surveys.id, id));
+      },
+      async remove(id) {
+        const db = getDb();
+        await db.delete(surveyResponses).where(eq(surveyResponses.surveyId, id));
+        await db.delete(surveys).where(eq(surveys.id, id));
+      },
+      async countSent(id, by) {
+        const db = getDb();
+        await db
+          .update(surveys)
+          .set({ sent: sql`${surveys.sent} + ${by}` })
+          .where(eq(surveys.id, id));
+      },
+      async saveResponse(row) {
+        const db = getDb();
+        await db
+          .insert(surveyResponses)
+          .values({ ...row, email: row.email.toLowerCase() })
+          .onConflictDoUpdate({
+            target: [surveyResponses.surveyId, surveyResponses.email],
+            set: {
+              answers: row.answers,
+              submittedAt: row.submittedAt ?? new Date(),
+            },
+          });
+      },
+      async listResponses(surveyId, limit = 2000) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(surveyResponses)
+            .where(eq(surveyResponses.surveyId, surveyId))
+            .orderBy(desc(surveyResponses.submittedAt))
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async findResponse(surveyId, email) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(surveyResponses)
+            .where(
+              and(
+                eq(surveyResponses.surveyId, surveyId),
+                eq(surveyResponses.email, email.toLowerCase()),
+              ),
+            )
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async responseCounts() {
+        const db = getDb();
+        try {
+          const rows = await db
+            .select({
+              surveyId: surveyResponses.surveyId,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(surveyResponses)
+            .groupBy(surveyResponses.surveyId);
+          return Object.fromEntries(rows.map((r) => [r.surveyId, r.count]));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return {};
+        }
+      },
+    },
     media: {
       async list() {
         const db = getDb();
@@ -2822,6 +2975,8 @@ function mockRepos(): RepoBundle {
   let mockLastImport: ImportMeta | null = null;
   const mockDealNotesStore: DealNoteRow[] = [];
   const mockReferrerStore = new Map<string, ReferrerRow>();
+  const mockSurveyStore = new Map<string, SurveyRow>();
+  const mockSurveyResponseStore = new Map<string, SurveyResponseRow>();
   const mockCampaignStore = new Map<string, CampaignRow>();
   /** Keyed "<campaignId>:<email>" so the mock enforces the same
    *  one-email-per-campaign rule the unique index does in Postgres. */
@@ -3971,6 +4126,90 @@ function mockRepos(): RepoBundle {
           updatedBy,
           updatedAt: new Date(),
         };
+      },
+    },
+    survey: {
+      async create(row) {
+        const id = row.id ?? `survey-${mockSurveyStore.size + 1}`;
+        const now = new Date();
+        const created: SurveyRow = {
+          id,
+          createdAt: now,
+          updatedAt: now,
+          name: row.name,
+          status: row.status ?? "draft",
+          config: row.config,
+          createdBy: row.createdBy,
+          sent: row.sent ?? 0,
+        } as SurveyRow;
+        mockSurveyStore.set(id, created);
+        return created;
+      },
+      async get(id) {
+        return mockSurveyStore.get(id) ?? null;
+      },
+      async list(filter = {}) {
+        let rows = Array.from(mockSurveyStore.values()).sort(
+          (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+        );
+        if (filter.statuses?.length) {
+          rows = rows.filter((r) => filter.statuses!.includes(r.status));
+        }
+        return rows;
+      },
+      async update(id, patch) {
+        const existing = mockSurveyStore.get(id);
+        if (!existing) return;
+        mockSurveyStore.set(id, {
+          ...existing,
+          ...patch,
+          updatedAt: new Date(),
+        } as SurveyRow);
+      },
+      async remove(id) {
+        mockSurveyStore.delete(id);
+        for (const [key, r] of mockSurveyResponseStore) {
+          if (r.surveyId === id) mockSurveyResponseStore.delete(key);
+        }
+      },
+      async countSent(id, by) {
+        const existing = mockSurveyStore.get(id);
+        if (!existing) return;
+        mockSurveyStore.set(id, { ...existing, sent: existing.sent + by });
+      },
+      async saveResponse(row) {
+        const email = row.email.toLowerCase();
+        const key = `${row.surveyId}:${email}`;
+        const existing = mockSurveyResponseStore.get(key);
+        mockSurveyResponseStore.set(key, {
+          id: existing?.id ?? `resp-${mockSurveyResponseStore.size + 1}`,
+          surveyId: row.surveyId,
+          email,
+          name: row.name ?? existing?.name ?? "",
+          answers: row.answers,
+          submittedAt: row.submittedAt ?? new Date(),
+          sourceKind: row.sourceKind ?? null,
+          sourceId: row.sourceId ?? null,
+        } as SurveyResponseRow);
+      },
+      async listResponses(surveyId, limit = 2000) {
+        return Array.from(mockSurveyResponseStore.values())
+          .filter((r) => r.surveyId === surveyId)
+          .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime())
+          .slice(0, limit);
+      },
+      async findResponse(surveyId, email) {
+        return (
+          mockSurveyResponseStore.get(`${surveyId}:${email.toLowerCase()}`) ??
+          null
+        );
+      },
+      async responseCounts() {
+        const out: Record<string, number> = {};
+        for (const r of mockSurveyResponseStore.values()) {
+          out[r.surveyId] = (out[r.surveyId] ?? 0) + 1;
+        }
+        return out;
       },
     },
     media: {

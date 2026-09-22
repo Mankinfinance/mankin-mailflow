@@ -169,6 +169,13 @@
       "when": 1790034587657,
       "tag": "0023_light_tiger_shark",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790046201201,
+      "tag": "0024_broad_sentinel",
+      "breakpoints": true
     }
   ]
 }

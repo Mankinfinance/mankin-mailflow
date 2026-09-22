@@ -13,6 +13,7 @@ import { currentSettings } from "@/lib/mailflow/current-settings";
 import type { AutomationRow, AutomationRunRow } from "@/lib/db/schema";
 import { AutomationFlowSchema } from "./types";
 import { nextAction, type ContactFacts, type RunPosition } from "./engine";
+import { surveyLink } from "@/lib/surveys/token";
 import {
   evaluateTrigger,
   type SubmissionHit,
@@ -345,6 +346,9 @@ async function advanceRun(
         }
       : null,
     contact: asksAboutContact ? await factsFor(run.email) : null,
+    /* What a split hashes on. Their address, so the side they land on
+       never changes between retries. */
+    splitKey: run.email,
   };
 
   const action = nextAction(flow, position, now);
@@ -443,6 +447,89 @@ async function advanceRun(
 
       // Move on whether the send worked or not — a failed send is a
       // dropped step, not a stuck contact.
+      if (action.thenNodeId) {
+        await repos().automation.updateRun(run.id, {
+          status: "waiting",
+          currentNodeId: action.thenNodeId,
+          nodeEnteredAt: now,
+          nextRunAt: now,
+        });
+      } else {
+        await repos().automation.updateRun(run.id, {
+          status: "done",
+          nextRunAt: null,
+          finishedAt: now,
+        });
+        outcome.exited += 1;
+      }
+      return outcome;
+    }
+
+    case "survey": {
+      /* A survey invitation is an ordinary send with one extra field:
+         a link signed for this recipient and this survey, which is why
+         the engine hands the node over rather than resolving it — the
+         signing is async and server-only. */
+      const send = await repos().automation.recordSend({
+        runId: run.id,
+        automationId: automation.id,
+        nodeId: action.nodeId,
+        email: run.email,
+      });
+
+      try {
+        const settings = await currentSettings();
+        const link = await surveyLink({
+          surveyId: action.surveyId,
+          email: run.email,
+          name: run.name,
+        });
+        const links = await buildRecipientLinks({
+          campaignId: `auto:${automation.id}`,
+          email: run.email,
+          /* Click-wrapping the survey link would put the response
+             behind a redirect that counts a click and then forwards —
+             harmless, but it makes the address in the status bar ours
+             rather than the one the email shows, on a link asking for
+             candour. Opens are still tracked. */
+          trackOpens: automation.trackOpens,
+          trackClicks: false,
+        });
+        const rendered = renderCampaign({
+          subject: action.subject,
+          body: action.body,
+          fields: { ...(run.fields ?? {}), survey_link: link },
+          brokerId: automation.fromBrokerId,
+          links,
+          postalAddress: settings.postalAddress,
+        });
+        const sender = teamMember(automation.fromBrokerId);
+        await sendMimeViaGraph({
+          fromEmail: sender.email,
+          fromName: sender.name,
+          to: run.email,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+          unsubscribeUrl: links.oneClickUrl,
+          unsubscribeMailto: settings.unsubscribeMailto || undefined,
+        });
+        await repos().automation.updateSend(send.id, { sentAt: now });
+        /* Counted here rather than on response, because the response
+           rate needs to know how many were asked. */
+        await repos().survey.countSent(action.surveyId, 1);
+        outcome.sent += 1;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await repos().automation.updateSend(send.id, {
+          error: message.slice(0, 500),
+        });
+        outcome.failed += 1;
+        console.error(
+          `[automation ${automation.id}] survey invite failed for ${run.email}: ${message}`,
+        );
+      }
+
       if (action.thenNodeId) {
         await repos().automation.updateRun(run.id, {
           status: "waiting",

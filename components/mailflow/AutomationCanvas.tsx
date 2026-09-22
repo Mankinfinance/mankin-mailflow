@@ -3,6 +3,8 @@ import {
   GitBranch,
   LogOut,
   Mail,
+  MessageSquareQuote,
+  Shuffle,
   Zap,
 } from "lucide-react";
 import type { AutomationFlow, AutomationNode } from "@/lib/automations/types";
@@ -56,11 +58,16 @@ export function AutomationCanvas({
     const node = nodeById.get(cursor);
     if (!node) break;
     trunk.push(node);
-    if (node.kind === "condition") break;
+    if (node.kind === "condition" || node.kind === "split") break;
     cursor = node.next;
   }
 
-  const condition = trunk.find((n) => n.kind === "condition");
+  /* A split forks the canvas the same way a condition does, so the
+     branch renderer treats them alike — otherwise a split's two arms
+     never got drawn at all. */
+  const condition = trunk.find(
+    (n) => n.kind === "condition" || n.kind === "split",
+  );
   const branch = (startId: string | null | undefined): AutomationNode[] => {
     const out: AutomationNode[] = [];
     const seen = new Set<string>();
@@ -70,7 +77,7 @@ export function AutomationCanvas({
       const node = nodeById.get(id);
       if (!node) break;
       out.push(node);
-      if (node.kind === "condition") break;
+      if (node.kind === "condition" || node.kind === "split") break;
       id = node.next;
     }
     return out;
@@ -107,7 +114,7 @@ export function AutomationCanvas({
             <BranchArms />
             <div className="flex items-start justify-center gap-8">
               <BranchColumn
-                label="NO"
+                label={condition.kind === "split" ? "B" : "NO"}
                 tone="#8a6a22"
                 nodes={branch(condition.nextNo)}
                 statsByNode={statsByNode}
@@ -115,7 +122,7 @@ export function AutomationCanvas({
                 brokerNames={brokerNames}
               />
               <BranchColumn
-                label="YES"
+                label={condition.kind === "split" ? "A" : "YES"}
                 tone="#2f6f4a"
                 nodes={branch(condition.nextYes)}
                 statsByNode={statsByNode}
@@ -204,6 +211,10 @@ const NODE_STYLE: Record<
   delay: { header: "#f2f2ef", ink: "#5f636e", border: "var(--color-hairline)", label: "Delay" },
   send: { header: "#eef1fb", ink: "#4151a8", border: "#cfd7f5", label: "Send" },
   condition: { header: "#fbf3e4", ink: "#8a6a22", border: "#e5d3ab", label: "Condition" },
+  survey: { header: "#eefafa", ink: "#0a7c7f", border: "#b9dfe0", label: "Survey" },
+  /* Same warm tone as a condition, because a split is a fork too —
+     just one decided by share rather than by a question. */
+  split: { header: "#fbf3e4", ink: "#8a6a22", border: "#e5d3ab", label: "Split" },
 };
 
 function NodeCard({
@@ -230,7 +241,16 @@ function NodeCard({
   }
 
   const style = NODE_STYLE[node.kind];
-  const Icon = node.kind === "delay" ? Clock : node.kind === "send" ? Mail : GitBranch;
+  const Icon =
+    node.kind === "delay"
+      ? Clock
+      : node.kind === "send"
+        ? Mail
+        : node.kind === "survey"
+          ? MessageSquareQuote
+          : node.kind === "split"
+            ? Shuffle
+            : GitBranch;
 
   return (
     <div
@@ -253,9 +273,15 @@ function NodeCard({
         <p className="text-[13px] font-semibold text-ink">
           {titleFor(node, brokerNames)}
         </p>
-        {node.kind === "send" && node.subject && (
+        {(node.kind === "send" || node.kind === "survey") && node.subject && (
           <p className="mono mt-0.5 truncate text-[11px] text-ink-mute">
             {node.subject}
+          </p>
+        )}
+        {node.kind === "split" && (
+          <p className="mt-0.5 text-[11.5px] text-ink-mute">
+            {node.splitPercent ?? 50}% one way, {100 - (node.splitPercent ?? 50)}% the
+            other — fixed per contact
           </p>
         )}
         {node.kind === "condition" && (
@@ -268,7 +294,7 @@ function NodeCard({
           </p>
         )}
 
-        {node.kind === "send" && stats && (
+        {(node.kind === "send" || node.kind === "survey") && stats && (
           <NodeStats
             items={[
               { label: "Sent", value: stats.sent },
@@ -302,6 +328,8 @@ function titleFor(
     }
     return node.check === "clicked" ? "Clicked the link?" : "Opened the email?";
   }
+  if (node.kind === "split") return "Split the contacts";
+  if (node.kind === "survey") return "Ask for feedback";
   return node.id;
 }
 
