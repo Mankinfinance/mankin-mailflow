@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CalendarClock, Lock, LoaderCircle } from "lucide-react";
 import type { AudiencePreview } from "@/app/(mailflow)/marketing/campaigns/actions";
+import { formatHour, type SendWindow } from "@/lib/campaigns/engagement";
 
 /**
  * "This reaches" — the rail that makes the consequence of sending
@@ -25,6 +26,9 @@ export interface ReachRailProps {
   blockedBy: string[];
   scheduledFor: string;
   onScheduledForChange: (value: string) => void;
+  /** The hour this list clicks most, from every click ever recorded.
+   *  Null when there have not been enough to say. */
+  bestHour: SendWindow | null;
   onSaveDraft: () => void;
   onSendTest: () => void;
   onSaveAsTemplate: () => void;
@@ -39,6 +43,7 @@ export function ReachRail({
   blockedBy,
   scheduledFor,
   onScheduledForChange,
+  bestHour,
   onSaveDraft,
   onSendTest,
   onSaveAsTemplate,
@@ -176,6 +181,23 @@ export function ReachRail({
           />
         </div>
 
+        {bestHour && (
+          <p className="mb-3 -mt-1.5 text-[11px] leading-relaxed text-ink-mute">
+            This list clicks most around{" "}
+            <strong className="font-semibold text-ink-soft">
+              {formatHour(bestHour.hour)}
+            </strong>
+            , across {bestHour.sampleSize} clicks.{" "}
+            <button
+              type="button"
+              onClick={() => onScheduledForChange(nextOccurrence(bestHour.hour))}
+              className="mf-quiet font-semibold text-brand underline underline-offset-2"
+            >
+              Use it
+            </button>
+          </p>
+        )}
+
         <div className="mb-2.5 grid grid-cols-2 gap-2">
           <GhostButton onClick={onSaveDraft} disabled={pending}>
             Save draft
@@ -310,4 +332,22 @@ function SendButton({
       {pending ? "Working…" : label}
     </button>
   );
+}
+
+/**
+ * The next time it is `hour` o'clock, as a datetime-local value.
+ *
+ * Computed in the browser's own zone rather than converted into
+ * Australia/Sydney, because a datetime-local input is read back in the
+ * browser's zone too — converting would show the broker a time an hour
+ * or two from the one they asked for. The firm and its clients are in
+ * one zone, so the two agree in practice.
+ */
+function nextOccurrence(hour: number): string {
+  const at = new Date();
+  at.setMinutes(0, 0, 0);
+  if (at.getHours() >= hour) at.setDate(at.getDate() + 1);
+  at.setHours(hour);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(hour)}:00`;
 }

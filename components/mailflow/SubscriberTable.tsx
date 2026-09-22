@@ -5,6 +5,8 @@ import { Ban, Landmark, Mail, Search, Tag as TagIcon, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { filterSubscribers, type Subscriber } from "@/lib/campaigns/subscribers";
 import type { ActivityEvent } from "@/lib/campaigns/subscribers";
+import type { EngagementProfile, SendWindow } from "@/lib/campaigns/engagement";
+import { EngagementPanel } from "./EngagementPanel";
 import { Eyebrow } from "./MailflowPage";
 
 /**
@@ -25,6 +27,12 @@ export interface SubscriberTableProps {
   stageNames: Record<string, string>;
   /** Activity per contact, keyed by email. */
   activity: Record<string, ActivityEvent[]>;
+  /** Engagement per contact, keyed by email. Absent for anyone who has
+   *  never been sent anything. */
+  engagement: Record<string, EngagementProfile>;
+  /** The hour each contact acts, keyed by email. Absent where neither
+   *  they nor the list has clicked enough to tell. */
+  sendWindows: Record<string, SendWindow>;
   /** Tags per contact, keyed by email. */
   tags: Record<string, string[]>;
   /** Every tag in use, with how many contacts carry it. */
@@ -39,6 +47,8 @@ export function SubscriberTable({
   brokerNames,
   stageNames,
   activity,
+  engagement,
+  sendWindows,
   tags,
   allTags,
   onSuppress,
@@ -342,6 +352,8 @@ export function SubscriberTable({
           brokerName={brokerNames[open.brokerId] ?? "Unassigned"}
           stageName={open.loan.stageId ? stageNames[open.loan.stageId] : null}
           events={activity[open.email] ?? []}
+          profile={engagement[open.email] ?? null}
+          sendWindow={sendWindows[open.email] ?? null}
           tags={tags[open.email] ?? []}
           onAddTag={(t) => onTag([open.email], t)}
           onRemoveTag={(t) => onUntag([open.email], t)}
@@ -359,6 +371,8 @@ function DetailPanel({
   brokerName,
   stageName,
   events,
+  profile,
+  sendWindow,
   tags,
   onAddTag,
   onRemoveTag,
@@ -368,6 +382,8 @@ function DetailPanel({
   brokerName: string;
   stageName: string | null;
   events: ActivityEvent[];
+  profile: EngagementProfile | null;
+  sendWindow: SendWindow | null;
   tags: string[];
   onAddTag: (tag: string) => Promise<void>;
   onRemoveTag: (tag: string) => Promise<void>;
@@ -493,6 +509,8 @@ function DetailPanel({
             : "From the live loan pipeline."}
         </p>
       </div>
+
+      {profile && <EngagementPanel profile={profile} sendWindow={sendWindow} />}
 
       <Eyebrow className="mb-2 mt-4">Activity</Eyebrow>
       {events.length === 0 ? (

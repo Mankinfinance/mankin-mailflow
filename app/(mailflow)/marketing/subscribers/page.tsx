@@ -14,6 +14,14 @@ import {
   countSubscribers,
   type ActivityEvent,
 } from "@/lib/campaigns/subscribers";
+import {
+  bestSendHour,
+  buildEngagementProfile,
+  buildSendTimeModel,
+  type EngagementEvent,
+  type EngagementProfile,
+  type SendWindow,
+} from "@/lib/campaigns/engagement";
 import { suppressManyAction } from "../campaigns/actions";
 import { tagContactsAction, untagContactsAction } from "./actions";
 
@@ -67,6 +75,32 @@ export default async function SubscribersPage() {
     activity[s.email] = buildActivity(s, allRecipients, campaignNames);
   }
 
+  /* Engagement runs off the same recipient rows, grouped by address.
+     The list-wide send-time model is built once from every click the
+     firm has ever recorded — a single contact almost never has enough
+     of their own, so the fallback is doing most of the work. */
+  const eventsByEmail = new Map<string, EngagementEvent[]>();
+  for (const r of allRecipients) {
+    const list = eventsByEmail.get(r.email) ?? [];
+    list.push({
+      campaignId: r.campaignId,
+      sentAt: r.sentAt,
+      openedAt: r.openedAt,
+      clickedAt: r.clickedAt,
+    });
+    eventsByEmail.set(r.email, list);
+  }
+
+  const listModel = buildSendTimeModel([...eventsByEmail.values()].flat());
+
+  const engagement: Record<string, EngagementProfile> = {};
+  const sendWindows: Record<string, SendWindow> = {};
+  for (const [email, events] of eventsByEmail) {
+    engagement[email] = buildEngagementProfile(email, events);
+    const window = bestSendHour(events, listModel);
+    if (window) sendWindows[email] = window;
+  }
+
   const brokerNames = Object.fromEntries(TEAM.map((m) => [m.id, m.name]));
   const stageNames = Object.fromEntries(STAGES.map((s) => [s.id, s.shortLabel]));
 
@@ -96,6 +130,8 @@ export default async function SubscribersPage() {
             brokerNames={brokerNames}
             stageNames={stageNames}
             activity={activity}
+            engagement={engagement}
+            sendWindows={sendWindows}
             tags={tags}
             allTags={tagCounts}
             onSuppress={suppressManyAction}

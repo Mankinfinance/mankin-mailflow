@@ -395,6 +395,14 @@ export interface CampaignRepo {
   recordLinkClick(campaignId: string, url: string): Promise<void>;
   /** Per-URL click totals, most-clicked first. */
   linkClicks(campaignId: string): Promise<CampaignLinkClickRow[]>;
+  /**
+   * Every click timestamp across every campaign, for the send-time
+   * model. One narrow column rather than whole recipient rows, because
+   * the editor asks this on every load and the answer is a histogram —
+   * pulling 5,000 rows per campaign to read one field each would make
+   * opening a draft proportional to the firm's entire sending history.
+   */
+  clickTimestamps(limit?: number): Promise<Date[]>;
 
   /* ---- suppression list (the do-not-market register) ---- */
   suppress(row: NewEmailSuppression): Promise<void>;
@@ -1839,6 +1847,20 @@ function realRepos(): RepoBundle {
             .where(and(...conditions))
             .orderBy(campaignRecipients.email)
             .limit(filter.limit ?? 1000);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async clickTimestamps(limit = 20000) {
+        const db = getDb();
+        try {
+          const rows = await db
+            .select({ clickedAt: campaignRecipients.clickedAt })
+            .from(campaignRecipients)
+            .where(isNotNull(campaignRecipients.clickedAt))
+            .limit(limit);
+          return rows.flatMap((r) => (r.clickedAt ? [r.clickedAt] : []));
         } catch (err) {
           if (!isMissingRelation(err)) throw err;
           return [];
@@ -3422,6 +3444,11 @@ function mockRepos(): RepoBundle {
           rows = rows.filter((r) => filter.statuses!.includes(r.status));
         }
         return rows.slice(0, filter.limit ?? 1000);
+      },
+      async clickTimestamps(limit = 20000) {
+        return Array.from(mockRecipientStore.values())
+          .flatMap((r) => (r.clickedAt ? [r.clickedAt] : []))
+          .slice(0, limit);
       },
       async nextPending(campaignId, limit) {
         return Array.from(mockRecipientStore.values())

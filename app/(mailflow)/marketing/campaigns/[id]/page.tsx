@@ -9,6 +9,10 @@ import { ClickMap } from "@/components/mailflow/ClickMap";
 import { DomainBreakdown } from "@/components/mailflow/DomainBreakdown";
 import { buildClickMap } from "@/lib/campaigns/click-map";
 import { buildDomainBreakdown } from "@/lib/campaigns/domains";
+import {
+  bestSendHour,
+  buildSendTimeModelFromClicks,
+} from "@/lib/campaigns/engagement";
 import { CampaignControls } from "@/components/campaigns/CampaignControls";
 import type { CurvePoint } from "@/components/mailflow/EngagementCurve";
 import { currentBroker } from "@/lib/auth/current-broker";
@@ -75,6 +79,13 @@ export default async function MarketingCampaignPage({
     // then jumps once the client-side recount lands.
     const initial = await previewAudienceAction(audience);
 
+    /* The hour to schedule for, from every click the firm has recorded.
+       Shown beside the scheduler rather than applied silently: the
+       broker is the one who knows whether this particular email should
+       land at the hour the last hundred did. */
+    const clicks = await repos().campaign.clickTimestamps();
+    const bestHour = bestSendHour([], buildSendTimeModelFromClicks(clicks));
+
     return (
       <Shell
         broker={broker}
@@ -100,6 +111,7 @@ export default async function MarketingCampaignPage({
           stages={STAGES.map((s) => ({ id: s.id, label: s.shortLabel }))}
           allTags={allTags}
           segments={segments}
+          bestHour={bestHour}
           sourceCounts={{
             settlements: settlements.filter((s) => s.loanStatus === "active").length,
             deals: deals.filter((d) => d.nurturedAt === null).length,

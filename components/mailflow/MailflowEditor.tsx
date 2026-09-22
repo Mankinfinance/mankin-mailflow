@@ -15,6 +15,7 @@ import { saveCampaignAsTemplateAction } from "@/app/(mailflow)/marketing/templat
 import { MERGE_FIELDS } from "@/lib/campaigns/audience";
 import { checkContent, contentVerdict } from "@/lib/campaigns/spam-check";
 import type { AudienceFilter } from "@/lib/campaigns/types";
+import type { SendWindow } from "@/lib/campaigns/engagement";
 import { AudienceSentence } from "./AudienceSentence";
 import { MessagePanel, PanelShell } from "./MessagePanel";
 import { ReachRail } from "./ReachRail";
@@ -53,6 +54,9 @@ export interface MailflowEditorProps {
   }>;
   sourceCounts: { settlements: number; deals: number };
   initialPreview: AudiencePreview | null;
+  /** The hour the firm's contacts click most, shown beside the
+   *  scheduler. Null when there is not enough to say. */
+  bestHour: SendWindow | null;
 }
 
 export function MailflowEditor({
@@ -64,6 +68,7 @@ export function MailflowEditor({
   segments,
   sourceCounts,
   initialPreview,
+  bestHour,
 }: MailflowEditorProps) {
   const router = useRouter();
   const [draft, setDraft] = React.useState(campaign);
@@ -290,6 +295,7 @@ export function MailflowEditor({
         blockedBy={unknownFields}
         scheduledFor={scheduledFor}
         onScheduledForChange={setScheduledFor}
+        bestHour={bestHour}
         pending={pending}
         status={status}
         onSaveDraft={() =>

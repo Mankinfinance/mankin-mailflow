@@ -158,7 +158,10 @@ function Th({
 }) {
   return (
     <th
-      className="pb-1.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-ink-faint"
+      /* Same column padding the cells carry, or "Opened" and "Open
+         rate" run into one another and neither heading sits over its
+         column. The last cell has no trailing padding to match. */
+      className="pb-1.5 pr-3 text-[9.5px] font-bold uppercase tracking-[0.12em] text-ink-faint last:pr-0"
       style={{ textAlign: align }}
     >
       {children}
