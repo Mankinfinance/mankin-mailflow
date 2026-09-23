@@ -462,6 +462,7 @@ async function advanceRun(
           brokerId: automation.fromBrokerId,
           links,
           postalAddress: settings.postalAddress,
+          signature: settings.signature,
         });
         // Same MIME path as campaigns: a sequence is bulk mail too, and
         // needs the same unsubscribe headers and text alternative.
@@ -561,6 +562,7 @@ async function advanceRun(
           brokerId: automation.fromBrokerId,
           links,
           postalAddress: settings.postalAddress,
+          signature: settings.signature,
         });
         const sender = teamMember(automation.fromBrokerId);
         await sendMimeViaGraph({

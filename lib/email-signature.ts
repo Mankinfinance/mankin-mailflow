@@ -1,4 +1,5 @@
 import { TEAM, type TeamMember } from "./team";
+import { SignatureSchema, type SignatureSettings } from "./mailflow/settings";
 
 /**
  * Broker email signatures.
@@ -14,10 +15,9 @@ import { TEAM, type TeamMember } from "./team";
  * HTML version (for Graph sends with contentType="HTML") and a plain
  * text version (for mailto: links and audit-log notes).
  *
- * Tweaking the signature for everyone: edit MANKIN_FOOTER_LINES or the
- * template below. Tweaking per-broker: add a `signatureOverride` field
- * to TEAM (not yet wired - currently always derives from the standard
- * template so the team looks consistent in the customer's inbox).
+ * The design is fixed here; what goes in it — photos, awards, social
+ * links, the disclaimer, each broker's title — is set in Mailflow's
+ * Settings (see SignatureSchema). The licence lines are not a setting.
  */
 
 /** Phone-display formatter: "0420699983" -> "0420 699 983". Accepts
@@ -61,20 +61,24 @@ export function reviewRequestLine(reviewUrl: string = MANKIN_REVIEW_URL): string
 export const MANKIN_CREDIT_LINE =
   "Mankin Finance Pty Ltd · Australian Credit Representative 102746 under Australian Credit Licence 390261";
 
-/** Compliance lines that go under every broker's sign-off. Single source
- *  so when the ACR / ACL changes you update one place. */
-const MANKIN_FOOTER_LINES = [
+/**
+ * The credit-licence lines. On every email, whatever the signature
+ * settings say: a credit representative is expected to show its ACR
+ * number and its licensee's ACL number, so these are not something a
+ * signature redesign can drop. Single source, so a change is one edit.
+ */
+export const MANKIN_LICENCE_LINES = [
   "Mankin Finance Pty Ltd | Australian Credit Representative 102746",
   "Under Australian Credit Licence 390261 (YBR Aggregation Services)",
-  "This email and any attachments are confidential. If you've received it in error, please delete it.",
 ];
 
-/* Brand colours used in the HTML signature. Match the dashboard tokens
-   so the signature reads as Mankin even when rendered by Outlook /
-   Gmail / Apple Mail. */
+/* Brand colours. BANNER_NAVY is the address band from the firm's own
+   Outlook signature; the rest match the dashboard tokens. */
 const BRAND_NAVY = "#1c2566";
+const BANNER_NAVY = "#0a0a64";
+const LINK_BLUE = "#1a3fb0";
+const INK = "#1a1a1a";
 const INK_MUTE = "#5a6280";
-const HAIRLINE = "#d6d8e0";
 
 export interface BrokerSignature {
   /** HTML version - safe for Outlook web + desktop, Gmail, Apple Mail. */
@@ -83,17 +87,18 @@ export interface BrokerSignature {
   text: string;
 }
 
-/**
- * Build a signature pair (HTML + plain text) for the given broker.
- * Falls back to a generic Mankin Finance block when the broker isn't
- * on the TEAM roster.
- */
-export function signatureFor(brokerId: string): BrokerSignature {
-  const member: TeamMember =
+export interface SignatureOptions {
+  /** From Settings. Omitted, the built-in defaults apply. */
+  signature?: SignatureSettings;
+  /** The firm's postal address, shown in the navy band. */
+  postalAddress?: string;
+}
+
+function memberFor(brokerId: string): TeamMember {
+  return (
     TEAM.find((m) => m.id === brokerId) ??
-    /* Sensible fallback so a missing TEAM row doesn't leave the
-       signature blank. The customer still sees Mankin branding +
-       compliance footer. */
+    /* A missing TEAM row still gets a branded signature with the
+       licence lines, rather than a blank one. */
     ({
       id: "fallback",
       name: "Mankin Finance",
@@ -103,60 +108,137 @@ export function signatureFor(brokerId: string): BrokerSignature {
       short: "Mankin",
       email: "hello@mankinfinance.com",
       phone: "0420 699 983",
-    } as TeamMember);
+    } as TeamMember)
+  );
+}
 
+/** "https://www.mankinfinance.com.au/" -> "www.mankinfinance.com.au" */
+function displayUrl(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
+/**
+ * Build a signature pair (HTML + plain text) for the given broker.
+ *
+ * The layout is the firm's own Outlook signature: sign-off; name, title
+ * and firm over a rule; headshot beside phone, email, website, social
+ * icons and booking link; a row of award badges; the address in a navy
+ * band; the confidentiality note; and the licence lines.
+ *
+ * Built so an unconfigured part disappears rather than breaks: no photo
+ * means no photo column, a social profile with no icon becomes a text
+ * link, a broker with no calendar has no booking line, no postal
+ * address means no band. Tables and inline styles throughout, because
+ * Outlook desktop renders with Word and ignores most modern CSS.
+ */
+export function signatureFor(
+  brokerId: string,
+  options: SignatureOptions = {},
+): BrokerSignature {
+  const sig = options.signature ?? SignatureSchema.parse({});
+  const member = memberFor(brokerId);
+  const brokerSig = sig.brokers[member.id];
+  const title = brokerSig?.title?.trim() || member.role;
+  const photoUrl = brokerSig?.photoUrl?.trim() || "";
   const phone = formatAuMobile(member.phone);
-  const websiteText = "mankinfinance.com";
-  const websiteHref = "https://mankinfinance.com";
-  /* Booking line only renders when the team roster has a calendar URL
-     for this broker. Empty bookingUrl drops the row entirely so the
-     signature stays clean until each broker pastes their link. */
   const bookingUrl = member.bookingUrl?.trim() ?? "";
-  const bookingRow = bookingUrl
+  const address = options.postalAddress?.trim() ?? "";
+  const awards = sig.awards.filter((a) => a.imageUrl.trim());
+
+  const socials = [
+    { name: "Instagram", url: sig.instagramUrl, icon: sig.instagramIconUrl },
+    { name: "LinkedIn", url: sig.linkedinUrl, icon: sig.linkedinIconUrl },
+  ].filter((s) => s.url.trim());
+
+  const a = (href: string, text: string, style = `color:${LINK_BLUE};text-decoration:underline;`) =>
+    `<a href="${escapeHtml(href)}" style="${style}">${escapeHtml(text)}</a>`;
+  const glyph = (g: string) =>
+    `<span style="color:${BRAND_NAVY};font-size:13px;">${g}</span>&nbsp;`;
+
+  const detailLines = [
+    `${glyph("&#9742;")}${a(`tel:${member.phone.replace(/\s+/g, "")}`, phone, `color:${INK};text-decoration:none;`)}`,
+    `${glyph("&#9993;")}${a(`mailto:${member.email}`, member.email)}`,
+    ...(sig.websiteUrl ? [`${glyph("&#127760;")}${a(sig.websiteUrl, displayUrl(sig.websiteUrl))}`] : []),
+  ];
+
+  const socialCell =
+    socials.length === 0
+      ? ""
+      : `<div style="padding:6px 0 2px 0;">${socials
+          .map((s) =>
+            s.icon.trim()
+              ? `<a href="${escapeHtml(s.url)}" style="text-decoration:none;"><img src="${escapeHtml(s.icon)}" width="36" height="36" alt="${s.name}" style="border:0;width:36px;height:36px;vertical-align:middle;"></a>`
+              : a(s.url, s.name),
+          )
+          .join("&nbsp;&nbsp;")}</div>`;
+
+  const bookingLine =
+    bookingUrl && sig.bookingLabel
+      ? `<div style="padding:8px 0 0 0;font-size:13.5px;">${a(bookingUrl, sig.bookingLabel)}</div>`
+      : "";
+
+  const details = [
+    `<div style="font-size:13.5px;line-height:1.75;color:${INK};">`,
+    detailLines.join("<br>"),
+    `</div>`,
+    socialCell,
+    bookingLine,
+  ].join("");
+
+  const detailsRow = photoUrl
     ? [
-        `  <tr><td style="padding:2px 0 10px 0;font-size:12.5px;">`,
-        `    <a href="${escapeHtml(bookingUrl)}" style="color:${BRAND_NAVY};text-decoration:none;font-weight:bold;">📅 Book a meeting with me</a>`,
-        `  </td></tr>`,
-      ].join("\n")
+        `<table cellpadding="0" cellspacing="0" border="0"><tr>`,
+        `<td valign="middle" style="padding:0 14px 0 0;border-right:1px solid ${BANNER_NAVY};">`,
+        `<img src="${escapeHtml(photoUrl)}" width="150" height="150" alt="${escapeHtml(member.name)}" style="display:block;border:0;width:150px;height:150px;border-radius:75px;">`,
+        `</td>`,
+        `<td valign="middle" style="padding:0 0 0 14px;">${details}</td>`,
+        `</tr></table>`,
+      ].join("")
+    : details;
+
+  const awardsRow =
+    awards.length === 0
+      ? ""
+      : `<tr><td style="padding:14px 0 8px 0;">${awards
+          .map(
+            (aw) =>
+              `<img src="${escapeHtml(aw.imageUrl)}" height="110" alt="${escapeHtml(aw.alt || "Award")}" style="border:0;height:110px;width:auto;vertical-align:middle;margin:0 14px 0 0;">`,
+          )
+          .join("")}</td></tr>`;
+
+  const bannerRow = address
+    ? `<tr><td bgcolor="${BANNER_NAVY}" style="background-color:${BANNER_NAVY};color:#ffffff;padding:14px 16px;font-size:14px;line-height:1.5;font-style:italic;">${escapeHtml(address)}</td></tr>`
     : "";
 
-  /* HTML version. Inline styles only - mail clients strip <style>
-     blocks. Table-based layout for maximum Outlook compatibility. */
   const html = [
-    `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#1a1a1a;">`,
-    `  <tr><td style="padding:14px 0 6px 0;border-top:1px solid ${HAIRLINE};">`,
-    `    <div style="font-weight:bold;color:${BRAND_NAVY};font-size:14px;">${escapeHtml(member.name)}</div>`,
-    `    <div style="color:${INK_MUTE};font-size:12px;">${escapeHtml(member.role)} &middot; Mankin Finance</div>`,
-    `  </td></tr>`,
-    `  <tr><td style="padding:2px 0 2px 0;font-size:12.5px;">`,
-    `    <a href="tel:${encodeURIComponent(member.phone.replace(/\s+/g, ""))}" style="color:${BRAND_NAVY};text-decoration:none;">${escapeHtml(phone)}</a>`,
-    `    &nbsp;|&nbsp; `,
-    `    <a href="mailto:${escapeHtml(member.email)}" style="color:${BRAND_NAVY};text-decoration:none;">${escapeHtml(member.email)}</a>`,
-    `  </td></tr>`,
-    `  <tr><td style="padding:2px 0 ${bookingUrl ? "2px" : "10px"} 0;font-size:12.5px;">`,
-    `    <a href="${websiteHref}" style="color:${BRAND_NAVY};text-decoration:none;">${websiteText}</a>`,
-    `  </td></tr>`,
-    bookingRow,
-    `  <tr><td style="padding:8px 0 0 0;border-top:1px solid ${HAIRLINE};color:${INK_MUTE};font-size:10.5px;line-height:1.5;">`,
-    MANKIN_FOOTER_LINES.map((l) => `    <div>${escapeHtml(l)}</div>`).join("\n"),
-    `  </td></tr>`,
+    `<table cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;font-family:Arial,Helvetica,sans-serif;color:${INK};margin-top:18px;">`,
+    sig.signOff ? `<tr><td style="padding:0 0 2px 0;font-size:13.5px;">${escapeHtml(sig.signOff)}</td></tr>` : "",
+    `<tr><td style="padding:0 0 6px 0;font-size:13.5px;border-bottom:1px solid ${BANNER_NAVY};"><strong>${escapeHtml(member.name)}</strong> | ${escapeHtml(title)} | Mankin Finance</td></tr>`,
+    `<tr><td style="padding:12px 0 4px 0;">${detailsRow}</td></tr>`,
+    awardsRow,
+    bannerRow,
+    sig.disclaimer
+      ? `<tr><td style="padding:16px 0 0 0;font-size:12px;line-height:1.55;color:#333333;">${escapeHtml(sig.disclaimer)}</td></tr>`
+      : "",
+    `<tr><td style="padding:10px 0 0 0;font-size:10.5px;line-height:1.5;color:${INK_MUTE};">${MANKIN_LICENCE_LINES.map(escapeHtml).join("<br>")}</td></tr>`,
     `</table>`,
   ]
-    .filter((row) => row !== "")
+    .filter(Boolean)
     .join("\n");
 
-  /* Plain-text version. Used for audit-log notes and any fallback path
-     where HTML can't render. */
   const text = [
     "",
-    "---",
-    member.name,
-    `${member.role} | Mankin Finance`,
-    `${phone} | ${member.email}`,
-    websiteText,
-    ...(bookingUrl ? [`Book a meeting: ${bookingUrl}`] : []),
+    ...(sig.signOff ? [sig.signOff] : []),
+    `${member.name} | ${title} | Mankin Finance`,
+    phone,
+    member.email,
+    ...(sig.websiteUrl ? [displayUrl(sig.websiteUrl)] : []),
+    ...socials.map((s) => `${s.name}: ${s.url}`),
+    ...(bookingUrl && sig.bookingLabel ? [`${sig.bookingLabel}: ${bookingUrl}`] : []),
+    ...(address ? ["", address] : []),
+    ...(sig.disclaimer ? ["", sig.disclaimer] : []),
     "",
-    ...MANKIN_FOOTER_LINES,
+    ...MANKIN_LICENCE_LINES,
   ].join("\n");
 
   return { html, text };
@@ -280,13 +362,14 @@ export function composeHtmlEmail(args: {
   body: string;
   brokerId: string;
   appendAppSignature?: boolean;
+  signature?: SignatureOptions;
 }): string {
   const parts = [
     `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:640px;">`,
     bodyToHtml(args.body),
   ];
   if (args.appendAppSignature) {
-    const { html: sigHtml } = signatureFor(args.brokerId);
+    const { html: sigHtml } = signatureFor(args.brokerId, args.signature);
     parts.push(sigHtml);
   }
   parts.push(`</div>`);
@@ -303,9 +386,10 @@ export function composePlainEmail(args: {
   body: string;
   brokerId: string;
   appendAppSignature?: boolean;
+  signature?: SignatureOptions;
 }): string {
   if (!args.appendAppSignature) return args.body.trim();
-  const { text: sigText } = signatureFor(args.brokerId);
+  const { text: sigText } = signatureFor(args.brokerId, args.signature);
   return `${args.body.trim()}\n${sigText}`;
 }
 

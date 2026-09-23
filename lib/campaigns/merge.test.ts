@@ -237,3 +237,40 @@ describe("images in a campaign body", () => {
     expect(html).toContain('alt="Rates for Sarah"');
   });
 });
+
+describe("links whose target merged to nothing", () => {
+  // booking_url is empty for any broker without a calendar link, and
+  // the templates end on [Book a time]({{booking_url}}). That used to
+  // reach the client as the literal text "[Book a time]()".
+  it("turn a link-only line into an invitation to reply", async () => {
+    const { resolveEmptyLinks, EMPTY_LINK_FALLBACK } = await import("./merge");
+    expect(resolveEmptyLinks("Hi.\n\n[Book a time]()")).toBe(`Hi.\n\n${EMPTY_LINK_FALLBACK}`);
+  });
+
+  it("keep the words of a link inside a sentence", async () => {
+    const { resolveEmptyLinks } = await import("./merge");
+    expect(resolveEmptyLinks("You can [book a time]( ) whenever suits.")).toBe(
+      "You can book a time whenever suits.",
+    );
+  });
+
+  it("leave real links alone", async () => {
+    const { resolveEmptyLinks } = await import("./merge");
+    const line = "[Book a time](https://tidycal.com/3qr45gm/30-minute-meeting)";
+    expect(resolveEmptyLinks(line)).toBe(line);
+  });
+
+  it("never leave brackets in a rendered email when booking_url is blank", async () => {
+    const { renderCampaign } = await import("./merge");
+    const out = renderCampaign({
+      subject: "Hi",
+      body: "Hi {{first_name}},\n\nWorth a look.\n\n[Book a time]({{booking_url}})",
+      fields: { first_name: "Sarah", booking_url: "" },
+      brokerId: "na",
+      links: { unsubscribeUrl: "https://app.example.com/e/u/x" },
+    });
+    expect(out.html).not.toContain("[Book a time]");
+    expect(out.text).not.toContain("[Book a time]");
+    expect(out.text).toContain("Just reply to this email");
+  });
+});

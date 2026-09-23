@@ -7,6 +7,7 @@ import {
   PageTitle,
 } from "@/components/mailflow/MailflowPage";
 import { SettingsForm } from "@/components/mailflow/SettingsForm";
+import { SignatureForm } from "@/components/mailflow/SignatureForm";
 import { DatabasePanel } from "@/components/mailflow/DatabasePanel";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
@@ -112,6 +113,10 @@ export default async function MailflowSettingsPage() {
             contactCount={counts.active}
             runsPerDay={runsPerDay}
             fromEnv={fromEnv}
+          />
+          <SignatureForm
+            initial={settings.signature}
+            postalAddress={settings.postalAddress}
           />
         </MailflowContent>
       </div>

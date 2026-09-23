@@ -23,6 +23,66 @@ import { BATCH_SIZE } from "@/lib/campaigns/send-limits";
 export const MIN_BATCH = 10;
 export const MAX_BATCH = 120;
 
+/**
+ * The email signature, set in Settings rather than in code.
+ *
+ * Everything that changes when the firm wins an award, gets a new
+ * photo taken or changes its website lives here, so none of it needs a
+ * deploy. Every URL must be https: these are fetched by the client's
+ * mail app, and a plain-http image is blocked or flagged by most of
+ * them.
+ *
+ * The credit-licence lines are deliberately not a setting. They go on
+ * every email regardless of what is configured here.
+ */
+const httpsOrEmpty = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^https:\/\/[^\s"'<>]+$/.test(v), {
+    message: "Must be a full https:// address, or left empty.",
+  });
+
+export const SignatureBrokerSchema = z.object({
+  /** e.g. "Director / Finance Broker". Empty uses their team role. */
+  title: z.string().trim().max(80).default(""),
+  /** A square headshot, shown as a circle. Empty leaves it out. */
+  photoUrl: httpsOrEmpty.default(""),
+});
+
+export const SignatureAwardSchema = z.object({
+  imageUrl: httpsOrEmpty,
+  /** What a client with images blocked reads instead, e.g. "Winner,
+   *  Australian Broking Awards 2024, Rising Star". */
+  alt: z.string().trim().max(120).default(""),
+});
+
+export const DEFAULT_DISCLAIMER =
+  "The content of this email is confidential and intended for the recipient specified in message only. It is strictly forbidden to share any part of this message with any third party, without a written consent of the sender. If you received this message by mistake, please reply to this message and follow with its deletion, so that we can ensure such a mistake does not occur in the future.";
+
+export const SignatureSchema = z.object({
+  signOff: z.string().trim().max(40).default("Regards"),
+  websiteUrl: httpsOrEmpty.default("https://www.mankinfinance.com.au"),
+  instagramUrl: httpsOrEmpty.default(""),
+  instagramIconUrl: httpsOrEmpty.default(""),
+  linkedinUrl: httpsOrEmpty.default(""),
+  linkedinIconUrl: httpsOrEmpty.default(""),
+  /** The words on the booking link. The link itself is each broker's
+   *  own calendar, so it appears only for brokers who have one. */
+  bookingLabel: z
+    .string()
+    .trim()
+    .max(80)
+    .default("Schedule a free 30 minute consultation"),
+  awards: z.array(SignatureAwardSchema).max(8).default([]),
+  disclaimer: z.string().trim().max(1200).default(DEFAULT_DISCLAIMER),
+  /** Per broker, keyed by team id. */
+  brokers: z
+    .record(z.string(), SignatureBrokerSchema)
+    .default({ mm: { title: "Director / Finance Broker", photoUrl: "" } }),
+});
+
+export type SignatureSettings = z.infer<typeof SignatureSchema>;
+
 export const MailflowSettingsSchema = z.object({
   /**
    * Postal address printed in the campaign footer. The broker signature
@@ -56,6 +116,8 @@ export const MailflowSettingsSchema = z.object({
    * inside it — the setting is for slowing down, not speeding up.
    */
   batchSize: z.number().int().min(MIN_BATCH).max(MAX_BATCH).default(BATCH_SIZE),
+
+  signature: SignatureSchema.default(SignatureSchema.parse({})),
 });
 
 export type MailflowSettings = z.infer<typeof MailflowSettingsSchema>;

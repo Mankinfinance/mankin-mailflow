@@ -79,6 +79,7 @@ export async function sendOneCampaignEmail(args: {
     brokerId: campaign.fromBrokerId,
     links,
     postalAddress: settings.postalAddress,
+    signature: settings.signature,
   });
 
   /* Sent as raw MIME rather than through Graph's JSON body, because

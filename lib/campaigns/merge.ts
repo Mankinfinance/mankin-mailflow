@@ -1,4 +1,5 @@
 import { composeHtmlEmail, composePlainEmail } from "@/lib/email-signature";
+import type { SignatureSettings } from "@/lib/mailflow/settings";
 
 /**
  * Turn a campaign's written body into the exact email one recipient
@@ -40,6 +41,31 @@ export function applyMergeFields(
     const value = fields[name.toLowerCase()];
     return value ?? "";
   });
+}
+
+/** What a link-only line becomes when its link has nowhere to go. */
+export const EMPTY_LINK_FALLBACK = "Just reply to this email and we'll find a time.";
+
+/**
+ * Tidy links whose target merged to nothing.
+ *
+ * `[Book a time]({{booking_url}})` is how the templates end, and
+ * booking_url is empty for any broker who has not set a calendar link.
+ * The link pattern only recognises an http(s) target, so an empty one
+ * was left as the literal text "[Book a time]()" in the client's
+ * email. A line that is nothing but that link becomes an invitation to
+ * reply, which is what the link was for; a link inside a sentence
+ * keeps its words and loses the brackets.
+ */
+export function resolveEmptyLinks(body: string): string {
+  return body
+    .split("\n")
+    .map((line) =>
+      /^\s*\[[^\]\n]+\]\(\s*\)\s*$/.test(line)
+        ? EMPTY_LINK_FALLBACK
+        : line.replace(/\[([^\]\n]+)\]\(\s*\)/g, "$1"),
+    )
+    .join("\n");
 }
 
 /**
@@ -241,8 +267,10 @@ export interface RenderCampaignInput {
   /** Whose signature goes at the bottom. */
   brokerId: string;
   links: CampaignLinks;
-  /** Postal address for the footer. Empty omits the line. */
+  /** Postal address, shown in the signature's navy band. */
   postalAddress?: string;
+  /** Signature settings. Omitted, the built-in defaults apply. */
+  signature?: SignatureSettings;
 }
 
 export interface RenderedCampaign {
@@ -258,21 +286,29 @@ export interface RenderedCampaign {
  */
 export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
   const subject = applyMergeFields(input.subject, input.fields).trim();
-  const mergedBody = applyMergeFields(input.body, input.fields);
+  const mergedBody = resolveEmptyLinks(applyMergeFields(input.body, input.fields));
   const { masked, links, images } = extractLinks(mergedBody);
   const wrapUrl = input.links.wrapUrl ?? ((url: string) => url);
 
+  const signature = {
+    signature: input.signature,
+    postalAddress: input.postalAddress,
+  };
   const bodyHtml = composeHtmlEmail({
     body: masked,
     brokerId: input.brokerId,
     // Campaigns go out unattended from the cron, so there is no broker
     // sitting in Outlook to insert their own signature.
     appendAppSignature: true,
+    signature,
   });
 
+  /* The address is in the signature's navy band now, so the footer
+     does not print it a second time. It is only passed to the footer
+     when there is no address at all, which prints nothing either way. */
   const parts = [
     restoreImagesHtml(restoreLinksHtml(bodyHtml, links, wrapUrl), images),
-    unsubscribeFooterHtml(input.links.unsubscribeUrl, input.postalAddress),
+    unsubscribeFooterHtml(input.links.unsubscribeUrl),
   ];
   if (input.links.openPixelUrl) {
     parts.push(
@@ -284,6 +320,7 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
     body: masked,
     brokerId: input.brokerId,
     appendAppSignature: true,
+    signature,
   });
 
   return {
@@ -292,7 +329,7 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
     text: [
       restoreImagesText(restoreLinksText(bodyText, links), images),
       "",
-      unsubscribeFooterText(input.links.unsubscribeUrl, input.postalAddress),
+      unsubscribeFooterText(input.links.unsubscribeUrl),
     ].join("\n"),
   };
 }
