@@ -93,6 +93,31 @@ the marketing account" and "this app can email as anyone in the firm".
 storage: the app runs, and every campaign, contact and tag resets on
 each redeploy. Fine for a look around, not for real sends.
 
+### The assistant
+
+| Variable | What it does |
+|---|---|
+| `ANTHROPIC_API_KEY` | Switches the "Ask Mailflow" assistant on. Without it the panel says so. |
+| `MAILFLOW_ASSISTANT_MODEL` | Optional. Defaults to `claude-sonnet-5`; set `claude-opus-5-5` for the most capable model, at more cost and latency. |
+| `MOCK_CHAT` | `true` forces the assistant off, for a demo. |
+
+One variable switches it on. The older convention elsewhere in the
+code — requiring `MOCK_CHAT=false` as well as a key — is not used here,
+for the same reason `DATABASE_URL` no longer needs `MOCK_DB=false`: two
+variables to switch on one thing is a trap.
+
+What it can do is fixed by code, not by its instructions: its tools
+only read, and only aggregates — counts, rates, campaign and sequence
+names, link URLs. No client's name or email address is sent to
+Anthropic. Adding a per-client lookup would mean sending client
+personal information to an overseas provider, which is the firm's
+decision to make under the Privacy Act (APP 8), not a default.
+
+Conversations live in the browser tab and are sent with each question;
+nothing a broker types is stored. The audit log records that a
+question was asked, which lookups ran and how long it took — not the
+question.
+
 ## Which repo owns the migrations
 
 **Mailflow runs them. LoanFlow must not.**

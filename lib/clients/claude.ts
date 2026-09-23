@@ -67,7 +67,7 @@ export async function chatComplete(input: ChatCompleteInput): Promise<ChatComple
 /** Strip every Mankin-forbidden character pattern from Claude's
  *  output. Currently: em dashes (U+2014) become hyphens. Add new
  *  passes here if other characters become problematic. */
-function sanitiseClaudeOutput(text: string): string {
+export function sanitiseClaudeOutput(text: string): string {
   return text.replace(/—/g, "-");
 }
 
