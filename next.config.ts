@@ -43,6 +43,18 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  /**
+   * The migration SQL has to travel with the function that runs it.
+   *
+   * Next traces what a route imports, and /api/admin/migrate imports
+   * none of drizzle/*.sql — it reads them from disk at runtime. Without
+   * this the route deploys, runs, finds an empty folder and reports
+   * success having applied nothing, which is the worst of the available
+   * outcomes.
+   */
+  outputFileTracingIncludes: {
+    "/api/admin/migrate": ["./drizzle/**/*"],
+  },
   experimental: {
     serverActions: {
       /* Customer portal uploads travel through a server action, and Next

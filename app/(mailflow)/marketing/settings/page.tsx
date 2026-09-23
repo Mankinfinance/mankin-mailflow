@@ -7,6 +7,7 @@ import {
   PageTitle,
 } from "@/components/mailflow/MailflowPage";
 import { SettingsForm } from "@/components/mailflow/SettingsForm";
+import { DatabasePanel } from "@/components/mailflow/DatabasePanel";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { listSettlements } from "@/lib/settlements-store";
@@ -63,6 +64,15 @@ export default async function MailflowSettingsPage() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <MailflowTopBar broker={{ name: broker.name, initials: broker.initials }} />
         <MailflowContent>
+          {/* First thing on the page, because "is any of this being
+              kept" outranks every setting below it. */}
+          <DatabasePanel
+            connected={Boolean(process.env.DATABASE_URL)}
+            usingPoolerForMigrations={
+              !process.env.MIGRATE_DATABASE_URL &&
+              (process.env.DATABASE_URL ?? "").includes("pooler")
+            }
+          />
           <PageTitle
             title="Settings"
             context={

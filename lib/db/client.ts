@@ -23,7 +23,7 @@ export function getDb(): Db {
   const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "DATABASE_URL missing. Set it in web/.env.local or flip MOCK_DB=true.",
+      "DATABASE_URL missing. Set it in .env.local, or leave it unset to run on in-memory storage.",
     );
   }
 
