@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { signIn } from "@/auth";
 import { authBypassEnabled } from "@/lib/auth/skip-auth";
 import { describeSignInError } from "@/lib/auth/signin-error";
+import { safeCallbackPath } from "@/lib/auth/callback-url";
+import { headers } from "next/headers";
 
 export const metadata = {
   title: "Sign in · Mailflow",
@@ -24,14 +26,28 @@ export const metadata = {
  * with `?error=<code>`. That has to be read and shown: a page that
  * ignores it renders a rejection as a fresh sign-in page, which reads
  * as a button that does nothing.
+ *
+ * It also passes `?callbackUrl=<where they were going>`. Sending
+ * everyone to the dashboard regardless turned every shared deep link
+ * into "the dashboard" for anyone whose session had lapsed — the link
+ * looks broken when the only thing that happened is a sign-in.
  */
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, callbackUrl } = await searchParams;
   const problem = describeSignInError(error);
+
+  /* The origin is needed to tell "an absolute URL back to us" from
+     "an absolute URL somewhere else", which is the difference between
+     honouring a deep link and being an open redirect. */
+  const host = (await headers()).get("host");
+  const destination = safeCallbackPath(
+    callbackUrl,
+    host ? `https://${host}` : undefined,
+  );
   /* The shared, hardened gate: SKIP_AUTH must be exactly "true" AND the
      build must not be a production one. The previous check here was
      `SKIP_AUTH !== "false"`, which failed open — with the variable
@@ -80,8 +96,10 @@ export default async function LoginPage({
           "use server";
           /* Mailflow has no /dashboard — its home is the marketing
              dashboard. Sending brokers to LoanFlow's route meant a
-             successful sign-in ended on a 404. */
-          await signIn("microsoft-entra-id", { redirectTo: "/marketing" });
+             successful sign-in ended on a 404. `destination` is that
+             home unless the broker was heading somewhere specific and
+             the path survived validation. */
+          await signIn("microsoft-entra-id", { redirectTo: destination });
         }}
         className="mt-10"
       >
