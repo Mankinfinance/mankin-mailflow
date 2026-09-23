@@ -43,19 +43,19 @@
   "crons": [
     {
       "path": "/api/cron/campaigns",
-      "schedule": "0 22 * * *"
-    },
-    {
-      "path": "/api/cron/bounces",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/cron/automations",
-      "schedule": "30 22 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/webhooks",
-      "schedule": "0 20 * * *"
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/automations",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/bounces",
+      "schedule": "0 * * * *"
     }
   ]
 }

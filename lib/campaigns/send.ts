@@ -12,7 +12,7 @@ import type { CampaignRow, CampaignRecipientRow } from "@/lib/db/schema";
 import { renderCampaign } from "./merge";
 import { buildRecipientLinks } from "./tracking";
 import { decideWinner, subjectFor } from "./ab-test";
-import { RUN_BUDGET } from "./send-limits";
+import { RUN_BUDGET, CLAIM_TTL_MS } from "./send-limits";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 
 /**
@@ -35,6 +35,7 @@ export {
   BATCH_SIZE,
   RUN_BUDGET,
   FIRST_BATCH_SIZE,
+  CLAIM_TTL_MS,
 } from "./send-limits";
 
 export interface DispatchResult {
@@ -113,9 +114,14 @@ export async function dispatchCampaignBatch(
   /* The broker's chosen pace, unless the caller named one — the inline
      first batch after a "Send" click passes its own, much smaller. */
   const settings = await currentSettings();
-  const batch = await campaignRepo.nextPending(
+  /* Claimed, not merely read. Two dispatchers can be in flight at once
+     — the cron ticking while an earlier tick is still sending, or the
+     inline batch from a "Send" click landing on top of a cron run —
+     and a plain read hands both the same people. */
+  const batch = await campaignRepo.claimPending(
     campaign.id,
     opts.batchSize ?? settings.batchSize,
+    CLAIM_TTL_MS,
   );
 
   let sent = 0;
@@ -163,6 +169,8 @@ export async function dispatchCampaignBatch(
         // Terminal, not retried: a bounce-worthy address or a rejected
         // mailbox will fail identically next run, and quietly retrying
         // it forever would hide the problem from the results panel.
+        // Recorded as failed rather than released, so the claim ends
+        // here — a released row would be retried forever.
         await campaignRepo.updateRecipient(recipient.id, {
           status: "failed",
           error: message.slice(0, 500),
@@ -175,8 +183,11 @@ export async function dispatchCampaignBatch(
     }
   }
 
-  const remaining = await campaignRepo.nextPending(campaign.id, 1);
-  const complete = remaining.length === 0;
+  /* Counts rows still claimed by another run as unsent. Asking only
+     for pending rows would call a campaign complete while a parallel
+     dispatcher was still working through its batch, firing the
+     campaign.sent webhook with totals that were about to change. */
+  const complete = (await campaignRepo.countUnsent(campaign.id)) === 0;
   if (complete) {
     await campaignRepo.update(campaign.id, {
       status: "sent",

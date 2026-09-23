@@ -236,3 +236,168 @@ describe("dispatchDueCampaigns", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Claiming — what stops two overlapping runs emailing the same people        */
+/* -------------------------------------------------------------------------- */
+
+describe("recipient claiming", () => {
+  it("does not send twice when two dispatchers overlap", async () => {
+    // The cron ticks every five minutes and a run may take longer, so
+    // this is the ordinary case rather than a rare race.
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("a@example.com"),
+      recipient("b@example.com"),
+      recipient("c@example.com"),
+    ]);
+
+    await Promise.all([
+      dispatchCampaignBatch(campaign),
+      dispatchCampaignBatch(campaign),
+    ]);
+
+    const addressed = sendMock.mock.calls.map(
+      (c) => (c[0] as { to: string }).to,
+    );
+    expect(new Set(addressed).size).toBe(addressed.length);
+  });
+
+  it("claims a recipient before sending to them", async () => {
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("a@example.com"),
+    ]);
+
+    const claimed = await repos().campaign.claimPending(campaign.id, 10, 60_000);
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0].status).toBe("sending");
+    expect(claimed[0].claimedAt).toBeInstanceOf(Date);
+
+    // A second claim finds nothing, because the first took it.
+    expect(await repos().campaign.claimPending(campaign.id, 10, 60_000)).toEqual(
+      [],
+    );
+  });
+
+  it("retakes a claim left behind by a run that died", async () => {
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("a@example.com"),
+    ]);
+
+    await repos().campaign.claimPending(campaign.id, 10, 60_000);
+    // Let the claim age, then treat anything older than a millisecond
+    // as abandoned. Nobody is going to finish it, and without this the
+    // contact is never emailed at all.
+    await new Promise((r) => setTimeout(r, 5));
+    const retaken = await repos().campaign.claimPending(campaign.id, 10, 1);
+    expect(retaken).toHaveLength(1);
+    expect(retaken[0].email).toBe("a@example.com");
+  });
+
+  it("releases a claim back to pending", async () => {
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("a@example.com"),
+    ]);
+    const [claimed] = await repos().campaign.claimPending(
+      campaign.id,
+      10,
+      60_000,
+    );
+    await repos().campaign.releaseClaim(claimed.id);
+
+    const again = await repos().campaign.claimPending(campaign.id, 10, 60_000);
+    expect(again).toHaveLength(1);
+  });
+
+  it("counts in-flight recipients as unsent", async () => {
+    // Otherwise a campaign is called complete — and fires its
+    // campaign.sent webhook with the wrong totals — while another
+    // dispatcher is still working through its batch.
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("a@example.com"),
+      recipient("b@example.com"),
+    ]);
+
+    await repos().campaign.claimPending(campaign.id, 1, 60_000);
+    expect(await repos().campaign.countUnsent(campaign.id)).toBe(2);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Opt-out — the part that has to work every time                             */
+/* -------------------------------------------------------------------------- */
+
+describe("opt-out", () => {
+  it("skips someone who unsubscribed after their batch was claimed", async () => {
+    // The window this closes: a contact opts out between the claim and
+    // their turn in the loop. Claiming must not freeze the decision.
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("gone@example.com"),
+      recipient("still@example.com"),
+    ]);
+    await repos().campaign.suppress({
+      email: "gone@example.com",
+      reason: "unsubscribe",
+      campaignId: campaign.id,
+      addedBy: "customer",
+    });
+
+    const result = await dispatchCampaignBatch(campaign);
+
+    expect(result.skipped).toBe(1);
+    const addressed = sendMock.mock.calls.map(
+      (c) => (c[0] as { to: string }).to,
+    );
+    expect(addressed).not.toContain("gone@example.com");
+    expect(addressed).toContain("still@example.com");
+  });
+
+  it("never leaves a suppressed recipient stuck in sending", async () => {
+    // A claimed row that is then skipped must reach a terminal status,
+    // or it sits claimed forever and the campaign never completes.
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("gone@example.com"),
+    ]);
+    await repos().campaign.suppress({
+      email: "gone@example.com",
+      reason: "unsubscribe",
+      campaignId: campaign.id,
+      addedBy: "customer",
+    });
+
+    await dispatchCampaignBatch(campaign);
+
+    const rows = await repos().campaign.listRecipients(campaign.id);
+    expect(rows.every((r) => r.status !== "sending")).toBe(true);
+    expect(await repos().campaign.countUnsent(campaign.id)).toBe(0);
+  });
+
+  it("puts a working unsubscribe link in every email it sends", async () => {
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("a@example.com"),
+    ]);
+
+    await dispatchCampaignBatch(campaign);
+
+    const [args] = sendMock.mock.calls[0] as [
+      { html: string; text: string; unsubscribeUrl: string },
+    ];
+
+    // The visible footer link, in both parts of the multipart body.
+    expect(args.html).toContain("/e/u/");
+    expect(args.text).toContain("/e/u/");
+
+    // And the one-click target the mail client's own unsubscribe
+    // button posts to, which is the API route rather than the confirm
+    // page: a POST from Gmail must act immediately, where a link a
+    // scanner might follow must not.
+    expect(args.unsubscribeUrl).toContain("/api/e/u/");
+  });
+});

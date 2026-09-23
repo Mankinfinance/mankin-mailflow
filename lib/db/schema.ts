@@ -891,11 +891,18 @@ export const campaignRecipients = pgTable(
     fields: jsonb("fields").$type<Record<string, string>>(),
 
     /**
-     * pending | sent | failed | skipped | holdback
+     * pending | sending | sent | failed | skipped | holdback
      *
      * "holdback" is the remainder of an A/B test: resolved and frozen
      * like everyone else, but not dispatched until a winning subject is
      * known. They become pending the moment one is.
+     *
+     * "sending" is a claim, not a state anyone chose. A dispatcher
+     * flips a slice of pending rows to it in one atomic statement
+     * before it sends any of them, so a second dispatcher running at
+     * the same time cannot pick up the same people. Without it, two
+     * overlapping runs both read the same pending rows and both email
+     * them — a duplicate to every client in the batch.
      */
     status: text("status").notNull().default("pending"),
     /** "a" | "b" for a test recipient; null when there is no test. */
@@ -905,6 +912,17 @@ export const campaignRecipients = pgTable(
     /** Truncated Graph error for a failed send. */
     error: text("error"),
 
+    /**
+     * When this row was claimed for sending.
+     *
+     * A dispatcher that dies mid-batch — a timeout, a redeploy — leaves
+     * rows claimed and never finishes them. Without a timestamp there
+     * is no way to tell that from a claim made a second ago, and those
+     * people would never be emailed at all. A claim older than the
+     * longest a run can live is treated as abandoned and retaken.
+     */
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+
     sentAt: timestamp("sent_at", { withTimezone: true }),
     openedAt: timestamp("opened_at", { withTimezone: true }),
     clickedAt: timestamp("clicked_at", { withTimezone: true }),
@@ -913,6 +931,10 @@ export const campaignRecipients = pgTable(
   (t) => [
     index("campaign_recipients_campaign_idx").on(t.campaignId),
     index("campaign_recipients_status_idx").on(t.status),
+    /* The claim query's exact predicate: one campaign's rows in one
+       status, oldest first. Without this it is a sequential scan on
+       every batch of a large send. */
+    index("campaign_recipients_claim_idx").on(t.campaignId, t.status),
     uniqueIndex("campaign_recipients_campaign_email_idx").on(
       t.campaignId,
       t.email,

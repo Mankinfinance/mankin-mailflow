@@ -7,9 +7,17 @@
  */
 
 /**
- * Emails per campaign per cron run. Exchange Online's published ceiling
- * is 30 messages a minute per mailbox; 60 an hour leaves a wide margin
- * and still clears a 500-person back-book in a working day.
+ * Emails per campaign per cron run.
+ *
+ * Exchange Online's published ceiling is 30 messages a minute per
+ * mailbox. The campaign cron ticks every five minutes, so 60 per run
+ * is 12 a minute — under half the ceiling, with the rest of the margin
+ * left for the broker's own outgoing mail from the same mailbox.
+ *
+ * This comment previously reasoned from an hourly cron and described
+ * 60 as "60 an hour". It is 720 an hour now. Still well inside the
+ * per-minute limit, which is the one that throttles, and far below the
+ * daily recipient cap at any volume this back-book reaches.
  */
 export const BATCH_SIZE = 60;
 
@@ -28,3 +36,19 @@ export const RUN_BUDGET = 120;
  * broker their campaign moving.
  */
 export const FIRST_BATCH_SIZE = 10;
+
+/**
+ * How long a claimed recipient stays claimed before another run may
+ * take it back.
+ *
+ * A dispatcher that dies mid-batch — the 300s function timeout, a
+ * redeploy landing mid-send — leaves rows claimed by nobody. Without a
+ * expiry those people are never emailed. With too short an expiry, a
+ * slow-but-alive run has its batch taken and they are emailed twice,
+ * which is the failure the claim exists to prevent.
+ *
+ * So: comfortably longer than the longest a run can live (maxDuration
+ * is 300s), at the cost of a crashed batch waiting a quarter of an
+ * hour. Delay is recoverable; a duplicate to a client is not.
+ */
+export const CLAIM_TTL_MS = 15 * 60 * 1000;

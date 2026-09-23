@@ -1,0 +1,2 @@
+ALTER TABLE "campaign_recipients" ADD COLUMN IF NOT EXISTS "claimed_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "campaign_recipients_claim_idx" ON "campaign_recipients" USING btree ("campaign_id","status");

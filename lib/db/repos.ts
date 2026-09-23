@@ -390,8 +390,31 @@ export interface CampaignRepo {
     campaignId: string,
     filter?: { statuses?: string[]; limit?: number },
   ): Promise<CampaignRecipientRow[]>;
-  /** The next slice of unsent recipients, oldest first. */
+  /** The next slice of unsent recipients, oldest first. Read-only. */
   nextPending(campaignId: string, limit: number): Promise<CampaignRecipientRow[]>;
+  /**
+   * Take ownership of the next slice, atomically, and return it.
+   *
+   * The caller is then the only one that will send to those people.
+   * `nextPending` cannot be used for dispatch: it is a plain read, so
+   * two runs overlapping — which is routine once the cron ticks more
+   * often than a long send takes — both see the same pending rows and
+   * both email them.
+   *
+   * `staleAfterMs` reclaims rows a dead run left claimed. It must be
+   * longer than the longest a dispatch can take, or a slow-but-alive
+   * run has its batch stolen and those people get two emails, which is
+   * the exact failure this exists to prevent.
+   */
+  claimPending(
+    campaignId: string,
+    limit: number,
+    staleAfterMs: number,
+  ): Promise<CampaignRecipientRow[]>;
+  /** Hand a claimed row back, so a later run picks it up again. */
+  releaseClaim(id: string): Promise<void>;
+  /** Pending + in-flight. Zero means the campaign is genuinely done. */
+  countUnsent(campaignId: string): Promise<number>;
   /** Move an A/B holdback to pending once a winner is known. */
   releaseHoldback(campaignId: string): Promise<number>;
   updateRecipient(
@@ -1942,6 +1965,88 @@ function realRepos(): RepoBundle {
         } catch (err) {
           if (!isMissingRelation(err)) throw err;
           return [];
+        }
+      },
+      async claimPending(campaignId, limit, staleAfterMs) {
+        const db = getDb();
+        try {
+          /* One statement, so the read and the claim cannot be pulled
+             apart by a concurrent run. FOR UPDATE SKIP LOCKED is what
+             makes two dispatchers take disjoint slices instead of
+             queueing behind each other: the second skips rows the
+             first has locked rather than waiting for them and then
+             finding they are already claimed.
+
+             Raw SQL because drizzle's query builder has no way to
+             express a locking sub-select, and this is precisely the
+             kind of statement that must not be approximated. */
+          const staleBefore = new Date(Date.now() - staleAfterMs);
+          const rows = await db.execute(sql`
+            UPDATE "campaign_recipients"
+               SET "status" = 'sending', "claimed_at" = now()
+             WHERE "id" IN (
+                   SELECT "id"
+                     FROM "campaign_recipients"
+                    WHERE "campaign_id" = ${campaignId}
+                      AND ("status" = 'pending'
+                           OR ("status" = 'sending'
+                               AND "claimed_at" < ${staleBefore}))
+                    ORDER BY "email"
+                    LIMIT ${limit}
+                      FOR UPDATE SKIP LOCKED
+                   )
+            RETURNING "id"
+          `);
+
+          const ids = (rows as unknown as { id: string }[]).map((r) => r.id);
+          if (ids.length === 0) return [];
+
+          /* Re-read through the typed select rather than mapping the
+             driver's snake_case rows by hand. These rows are already
+             claimed, so nobody else can change them underneath us and
+             the second statement costs an indexed lookup. */
+          return await db
+            .select()
+            .from(campaignRecipients)
+            .where(inArray(campaignRecipients.id, ids))
+            .orderBy(campaignRecipients.email);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async releaseClaim(id) {
+        const db = getDb();
+        try {
+          await db
+            .update(campaignRecipients)
+            .set({ status: "pending", claimedAt: null })
+            .where(
+              and(
+                eq(campaignRecipients.id, id),
+                eq(campaignRecipients.status, "sending"),
+              ),
+            );
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+        }
+      },
+      async countUnsent(campaignId) {
+        const db = getDb();
+        try {
+          const rows = await db
+            .select({ n: sql<number>`count(*)::int` })
+            .from(campaignRecipients)
+            .where(
+              and(
+                eq(campaignRecipients.campaignId, campaignId),
+                inArray(campaignRecipients.status, ["pending", "sending"]),
+              ),
+            );
+          return rows[0]?.n ?? 0;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return 0;
         }
       },
       async releaseHoldback(campaignId) {
@@ -3720,6 +3825,7 @@ function mockRepos(): RepoBundle {
             status: row.status ?? "pending",
             skipReason: row.skipReason ?? null,
             error: row.error ?? null,
+            claimedAt: row.claimedAt ?? null,
             sentAt: row.sentAt ?? null,
             openedAt: row.openedAt ?? null,
             clickedAt: row.clickedAt ?? null,
@@ -3748,6 +3854,54 @@ function mockRepos(): RepoBundle {
           .filter((r) => r.campaignId === campaignId && r.status === "pending")
           .sort((a, b) => a.email.localeCompare(b.email))
           .slice(0, limit);
+      },
+      async claimPending(campaignId, limit, staleAfterMs) {
+        /* The mock store is one process with no concurrency, so the
+           claim is just the flip. It is still done here rather than
+           skipped, because the send path reads the returned rows'
+           status and tests would otherwise exercise a shape the real
+           repo never produces. */
+        const staleBefore = Date.now() - staleAfterMs;
+        const eligible = Array.from(mockRecipientStore.values())
+          .filter(
+            (r) =>
+              r.campaignId === campaignId &&
+              (r.status === "pending" ||
+                (r.status === "sending" &&
+                  (r.claimedAt?.getTime() ?? 0) < staleBefore)),
+          )
+          .sort((a, b) => a.email.localeCompare(b.email))
+          .slice(0, limit);
+
+        const now = new Date();
+        return eligible.map((r) => {
+          const claimed = {
+            ...r,
+            status: "sending",
+            claimedAt: now,
+          } as CampaignRecipientRow;
+          mockRecipientStore.set(`${r.campaignId}:${r.email.toLowerCase()}`, claimed);
+          return claimed;
+        });
+      },
+      async releaseClaim(id) {
+        const existing = mockRecipientStore.get(id);
+        const row =
+          existing ??
+          Array.from(mockRecipientStore.values()).find((r) => r.id === id);
+        if (!row || row.status !== "sending") return;
+        mockRecipientStore.set(`${row.campaignId}:${row.email.toLowerCase()}`, {
+          ...row,
+          status: "pending",
+          claimedAt: null,
+        } as CampaignRecipientRow);
+      },
+      async countUnsent(campaignId) {
+        return Array.from(mockRecipientStore.values()).filter(
+          (r) =>
+            r.campaignId === campaignId &&
+            (r.status === "pending" || r.status === "sending"),
+        ).length;
       },
       async releaseHoldback(campaignId) {
         let released = 0;

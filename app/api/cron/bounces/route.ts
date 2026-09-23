@@ -4,7 +4,7 @@ import { auditLog } from "@/lib/audit";
 import { reconcileBounces } from "@/lib/campaigns/reconcile-bounces";
 
 /**
- * Daily bounce reconciliation.
+ * Hourly bounce reconciliation.
  *
  * Reads recent non-delivery reports out of the mailboxes campaigns were
  * sent from and adds the permanently dead addresses to the register. A
@@ -12,8 +12,10 @@ import { reconcileBounces } from "@/lib/campaigns/reconcile-bounces";
  * ago; without this, each one costs a send every time it matches a
  * segment, and the sending domain's reputation pays for it.
  *
- * Runs after the hourly campaign cron has had a night to drain, so a
- * campaign sent yesterday has bounced before we look.
+ * Hourly rather than per-tick because a non-delivery report takes
+ * minutes to hours to come back — checking every five minutes would
+ * mostly read an empty mailbox, and a dead address costs nothing to
+ * catch an hour late.
  *
  * Requires the Mail.Read application permission on the same Entra app
  * registration that already holds Mail.Send. Without it the run reports
