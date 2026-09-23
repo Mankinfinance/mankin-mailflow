@@ -63,6 +63,10 @@ export async function reconcileBounces(
   const mailedAddresses = new Set<string>();
   const mailboxes = new Set<string>();
   const recipientIdByEmail = new Map<string, string>();
+  /* Which campaign the address was last mailed by. The bounce event
+     needs it to find the client's file — an address on its own names
+     nobody in the CRM. */
+  const campaignIdByEmail = new Map<string, string>();
 
   for (const campaign of campaigns) {
     if (!campaign.startedAt || campaign.startedAt < recipientCutoff) continue;
@@ -77,6 +81,7 @@ export async function reconcileBounces(
       // Most recent send wins, so a bounce is attributed to the campaign
       // that most likely caused it.
       recipientIdByEmail.set(r.email, r.id);
+      campaignIdByEmail.set(r.email, campaign.id);
     }
   }
 
@@ -136,6 +141,11 @@ export async function reconcileBounces(
       await emitWebhook("contact.bounced", {
         email: bounce.email,
         hard: true,
+        campaignId: campaignIdByEmail.get(bounce.email) ?? null,
+        /* The mail server's own words, trimmed. "Mailbox does not
+           exist" tells a broker to ring and ask for a new address;
+           "hard bounce" tells them nothing. */
+        reason: bounce.diagnostic || null,
       });
       await markRecipientBounced(bounce, recipientIdByEmail, true);
 

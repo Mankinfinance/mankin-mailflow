@@ -75,12 +75,21 @@ export async function submitSurveyAction(
      receiver to know how NPS buckets work. */
   const npsQuestion = config.data.questions.find((q) => q.kind === "nps");
   const score = npsQuestion ? Number(clean[npsQuestion.id]) : null;
+  /* The first free-text answer, named as the comment. Every receiver
+     wants it — it is the sentence a broker reads — and picking it out
+     of `answers` requires knowing this survey's question ids. */
+  const commentQuestion = config.data.questions.find((q) => q.kind === "text");
+  const comment = commentQuestion
+    ? (clean[commentQuestion.id] ?? "")
+    : "";
+
   await emitWebhook("survey.responded", {
     surveyId: survey.id,
     surveyName: survey.name,
     email: verified.claims.em,
     name: verified.claims.nm,
     nps: Number.isFinite(score) ? score : null,
+    comment,
     answers: clean,
   });
 

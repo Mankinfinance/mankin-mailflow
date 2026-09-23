@@ -1,5 +1,6 @@
 import "server-only";
 import { repos } from "@/lib/db/repos";
+import { noteOnSalestrekker } from "@/lib/integrations/salestrekker-notes";
 import { checkWebhookUrl } from "./safe-url";
 import {
   DELIVERY_HEADER,
@@ -48,6 +49,19 @@ export async function emitWebhook(
   data: Record<string, unknown>,
   occurredAt: Date = new Date(),
 ): Promise<void> {
+  /* Salestrekker is a subscriber with no URL.
+     It does not accept an envelope over HTTP, so it cannot be an
+     endpoint row; what it has is an API and a notes field. Handled
+     here rather than at each emit site so a new event gets it for
+     free, and awaited rather than queued because addNote is a single
+     call against a system we already depend on being up.
+
+     Before the queue, deliberately: if one of the two has to happen
+     first, the broker's own file is the one that matters. */
+  if (salestrekkerNotesEnabled()) {
+    await noteOnSalestrekker(event, data);
+  }
+
   try {
     const endpoints = await repos().webhook.endpointsFor(event);
     for (const endpoint of endpoints) {
@@ -253,4 +267,16 @@ async function readCappedBody(response: Response): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether campaign activity is written back to Salestrekker.
+ *
+ * On unless explicitly turned off. The alternative default — off until
+ * somebody finds the switch — means the feature exists and nobody's
+ * files have any notes on them, which is indistinguishable from it not
+ * working.
+ */
+export function salestrekkerNotesEnabled(): boolean {
+  return process.env.SALESTREKKER_NOTES !== "false";
 }

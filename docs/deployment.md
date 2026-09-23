@@ -261,3 +261,39 @@ single argument for Pro.
 - **`AADSTS7000215`** → wrong client secret, usually the Secret ID copied instead of the Value
 - **500 or an application error** → an env var is missing; check Runtime Logs
 - **A warning that `middleware.ts` cannot be found** → a false positive. Next 16 renamed middleware to `proxy.ts`; ignore it.
+
+## Salestrekker
+
+Two directions, and they work differently.
+
+**Out of Salestrekker into Mailflow**: the existing API client. Deals
+and settlements are read from it; `SALESTREKKER_API_KEY` is the only
+setting.
+
+**Out of Mailflow into Salestrekker**: notes on the deal, not HTTP.
+Salestrekker has no inbound webhook URL to POST an envelope at, so the
+"webhook" is `addNote` through the same client, written when a
+campaign event concerns somebody with an open deal:
+
+| Event | What lands on the file |
+|---|---|
+| `contact.clicked` | The campaign and the link they clicked |
+| `contact.unsubscribed` | That they opted out, and that loan correspondence is unaffected |
+| `contact.bounced` | The mail server's own diagnostic, and to confirm the address |
+| `survey.responded` | The NPS score and their comment |
+
+Not `form.submitted`: a form with a Salestrekker destination already
+creates the deal through the same client, so a note would annotate a
+deal that exists because of it. Not `campaign.sent` or
+`campaign.failed`: those are about a send, not a person, so there is
+no file they belong on.
+
+Only recipients whose contact came from a deal get a note. The settled
+back-book has no open deal to write on, and a note cannot invent one.
+
+A failure is logged and swallowed. Losing an unsubscribe because the
+CRM was down would be much the worse trade.
+
+Set `SALESTREKKER_NOTES=false` to turn it off. It is on by default,
+because the alternative — a feature nobody can tell is switched off —
+is indistinguishable from it being broken.
