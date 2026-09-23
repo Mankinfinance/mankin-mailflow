@@ -115,6 +115,23 @@ as already applied, skips them, and applies `0012` onward. Running it
 the other way round does nothing useful, since LoanFlow has no
 migration the database is missing.
 
+### Sharing it is safe, and also not optional
+
+Mailflow reads `settlements` — the back-book from the commission file —
+out of Postgres, via `lib/settlements-store.ts`. Point it at a database
+of its own and it has no contacts at all: no audience to resolve, no
+anniversary to trigger on, no lender for a condition to test. It is the
+loan book that makes this worth running instead of Mailchimp, so it has
+to be the same database.
+
+That is safe because Mailflow's migrations only ever add. Every `ALTER`
+from `0012` onward targets a table Mailflow created itself —
+`campaigns`, `campaign_recipients`, `form_submissions` — and every one
+is an `ADD COLUMN`. Nothing LoanFlow owns is touched, nothing is
+dropped, no type changes. Worth re-checking with a grep over
+`drizzle/00[12]*.sql` before any future migration runs against
+production, rather than trusting this paragraph.
+
 ### The thing that would break this
 
 If LoanFlow ever adds a migration of its own, it becomes `0012` there
