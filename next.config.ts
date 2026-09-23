@@ -54,6 +54,13 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingIncludes: {
     "/api/admin/migrate": ["./drizzle/**/*"],
+    /* The settings pages don't apply migrations, but they count the
+       files to report how many this build shipped — and a count of
+       zero is exactly the failure this whole block exists to catch,
+       so it must not be produced by the reporting page being traced
+       differently from the route that runs them. */
+    "/marketing/settings": ["./drizzle/**/*"],
+    "/marketing/settings/database": ["./drizzle/**/*"],
   },
   experimental: {
     serverActions: {

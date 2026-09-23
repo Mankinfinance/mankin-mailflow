@@ -166,14 +166,41 @@ let Mailflow migrate it, or split the databases first.
 2. Leave `MOCK_DB` unset. The repos use Postgres whenever a
    `DATABASE_URL` is present; `MOCK_DB=true` force-mocks even when one
    is, which is a testing lever rather than a production setting.
-3. Run `pnpm db:migrate` against that URL, from the Mailflow repo.
-4. Redeploy.
+3. Redeploy. Environment variables are read by the running function,
+   so a build made before the variable existed will not see it — the
+   variable alone changes nothing until something redeploys.
+4. Open `/marketing/settings/database` and press **Set up the tables**.
 
-Until step 3 runs, the app still starts: a query against a table that
-does not exist yet is caught and falls back to empty rather than
-erroring (see `isMissingRelation` in `lib/db/repos.ts`). That is a
-safety net for a half-migrated database, not a substitute for
-migrating.
+Step 4 is the same work `pnpm db:migrate` does, from a button, because
+the person who needs to do it is a mortgage broker rather than a
+release engineer. It applies the files in `drizzle/`, in order,
+skipping those already recorded, and running it twice does nothing the
+second time.
+
+Until it runs, the app still starts: a query against a table that does
+not exist yet is caught and falls back to empty rather than erroring
+(see `isMissingRelation` in `lib/db/repos.ts`). That is a safety net
+for a half-migrated database, not a substitute for migrating.
+
+### `/marketing/settings/database`
+
+A fixed URL rather than a panel to hunt for, because when something is
+wrong the most useful question is which build am I even looking at.
+The page reports:
+
+- the commit this deployment was built from, and the Vercel environment
+- whether `DATABASE_URL` is set, and whether `MOCK_DB=true` is
+  overriding it
+- how many migration files this build shipped — a zero here means the
+  `drizzle/` folder was not traced into the function, and a migration
+  run would report success having applied nothing
+- whether the database can actually be reached, with the connection
+  error when it cannot
+- which of the schema's tables exist and which are missing
+
+If that URL 404s, the deployment predates the page. That is the answer
+to "I can't find the button": nothing is misconfigured, the build is
+just older than the feature. Redeploy.
 
 ## Sign in from the production domain, not a deployment URL
 

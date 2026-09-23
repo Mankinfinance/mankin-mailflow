@@ -14,6 +14,7 @@ import { listSettlements } from "@/lib/settlements-store";
 import { repos } from "@/lib/db/repos";
 import { buildSubscribers, countSubscribers } from "@/lib/campaigns/subscribers";
 import { currentSettings } from "@/lib/mailflow/current-settings";
+import { databaseConfig } from "@/lib/db/state";
 import { settingsFromEnv } from "@/lib/mailflow/settings";
 import { senderDomain, scheduledRunsPerDay } from "@/lib/mailflow/sending-config";
 
@@ -67,11 +68,8 @@ export default async function MailflowSettingsPage() {
           {/* First thing on the page, because "is any of this being
               kept" outranks every setting below it. */}
           <DatabasePanel
-            connected={Boolean(process.env.DATABASE_URL)}
-            usingPoolerForMigrations={
-              !process.env.MIGRATE_DATABASE_URL &&
-              (process.env.DATABASE_URL ?? "").includes("pooler")
-            }
+            config={databaseConfig()}
+            detailHref="/marketing/settings/database"
           />
           <PageTitle
             title="Settings"
