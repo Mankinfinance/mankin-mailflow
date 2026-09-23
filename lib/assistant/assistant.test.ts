@@ -431,3 +431,17 @@ describe("reading a reply into paragraphs and lists", () => {
     expect(segments("\n\n")).toEqual([]);
   });
 });
+
+describe("the address in email links", () => {
+  it("is reported as a value, since it is public and the mistake is in the value", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://mankin-followup.vercel.app";
+    const { result } = await runTool("setup_status", {});
+    expect(result.addressInEmailLinks).toBe("https://mankin-followup.vercel.app");
+  });
+
+  it("is reported missing rather than as the localhost fallback", async () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    const { result } = await runTool("setup_status", {});
+    expect(result.addressInEmailLinks).toBeNull();
+  });
+});

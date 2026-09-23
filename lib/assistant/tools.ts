@@ -94,7 +94,7 @@ export const TOOLS = {
     definition: {
       name: "setup_status",
       description:
-        "Whether Mailflow is configured to actually keep data and send email: database, scheduled jobs, Microsoft sending credentials, Salestrekker. Use this first whenever someone says nothing is sending, nothing is saved, or sequences are not moving.",
+        "Whether Mailflow is configured to actually keep data and send email: database, scheduled jobs, Microsoft sending credentials, and the address used in email links (it must be https://mankin-mailflow.vercel.app — anything else, including LoanFlow's address or none, is a problem to raise). Use this first whenever someone says nothing is sending, nothing is saved, or sequences are not moving.",
       input_schema: { type: "object", properties: {} },
     },
     input: z.object({}),
@@ -123,6 +123,13 @@ export const TOOLS = {
         salestrekkerLiveConnection: false,
         dealNotesOn: process.env.SALESTREKKER_NOTES !== "false",
         signInAddressPinned: present(process.env.AUTH_URL),
+        /* Shown as a value because it is public — it is printed in
+           every email — and because the likely mistake is visible only
+           in the value: this project began as a copy of LoanFlow, and
+           if the address is LoanFlow's, every unsubscribe and tracking
+           link in every email goes to the wrong app. Unset, links fall
+           back to localhost. */
+        addressInEmailLinks: process.env.NEXT_PUBLIC_APP_URL ?? null,
       };
     },
   }),
