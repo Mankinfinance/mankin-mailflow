@@ -82,7 +82,7 @@ The Mailflow guide follows.
  */
 export function systemPrompt(ctx: AssistantContext): Anthropic.TextBlockParam[] {
   const today = ctx.now.toLocaleDateString("en-AU", {
-    timeZone: "Australia/Melbourne",
+    timeZone: "Australia/Sydney",
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -97,7 +97,7 @@ export function systemPrompt(ctx: AssistantContext): Anthropic.TextBlockParam[] 
     {
       type: "text",
       text: [
-        `Today is ${today} (Melbourne).`,
+        `Today is ${today} (Sydney).`,
         `You are talking to ${ctx.brokerName}.`,
         ctx.page ? `They are on ${ctx.page}.` : null,
       ]

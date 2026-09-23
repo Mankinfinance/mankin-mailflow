@@ -167,6 +167,24 @@ export function checkContent(input: CheckInput): ContentIssue[] {
     });
   }
 
+  /* A template's [placeholder] still in the email. Square brackets not
+     followed by "(" — that would be a link — and not preceded by "!",
+     an image. The library's templates use these for the parts only the
+     broker knows ("[suburb]", "[held / moved]"); one reaching a client
+     reads as a form letter nobody finished. */
+  const placeholders = [
+    ...`${subject}\n${body}`.matchAll(/(?<!!)\[([^\]\n]{1,60})\](?!\()/g),
+  ].map((m) => `[${m[1]}]`);
+  if (placeholders.length > 0) {
+    issues.push({
+      severity: "warn",
+      message: `A placeholder is still in the email: ${placeholders.slice(0, 3).join(", ")}${
+        placeholders.length > 3 ? `, and ${placeholders.length - 3} more` : ""
+      }.`,
+      fix: "Replace it with the real detail, or delete the line.",
+    });
+  }
+
   const found = RISKY_PHRASES.filter((phrase) => haystack.includes(phrase));
   if (found.length > 0) {
     issues.push({

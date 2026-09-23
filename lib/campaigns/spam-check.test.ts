@@ -125,3 +125,23 @@ describe("checkContent", () => {
     }
   });
 });
+
+describe("placeholders left in", () => {
+  it("warns about a [placeholder] still in the body or subject", () => {
+    const issues = checkContent({
+      subject: "What the [suburb] market is doing",
+      body: "Hi Sarah,\n\nThe median in [suburb] moved this quarter, and here is what that means for the equity in your home and your options this year.",
+    });
+    const hit = issues.find((i) => i.message.startsWith("A placeholder"));
+    expect(hit?.severity).toBe("warn");
+    expect(hit?.message).toContain("[suburb]");
+  });
+
+  it("does not mistake a link or an image for a placeholder", () => {
+    const issues = checkContent({
+      subject: "Worth a look",
+      body: "Hi Sarah,\n\nYour rate is worth a second look this year, because lenders price new customers better than existing ones.\n\n![Rising Star](https://mankinfinance.com/a.png)\n\n[Book a time]({{booking_url}})",
+    });
+    expect(issues.some((i) => i.message.startsWith("A placeholder"))).toBe(false);
+  });
+});

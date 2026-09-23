@@ -83,7 +83,7 @@ export function SettingsForm({
           <input
             value={draft.postalAddress}
             onChange={(e) => patch({ postalAddress: e.target.value })}
-            placeholder="Suite 2, 123 Example Street, Melbourne VIC 3000"
+            placeholder="Suite 208, Oran Park Podium, 351 Oran Park Drive, Oran Park NSW 2570"
             className="h-[34px] w-full rounded-md border border-hairline bg-surface px-2.5 text-[12.5px] text-ink placeholder:text-ink-faint"
           />
         </Field>

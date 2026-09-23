@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail } from "lucide-react";
+import { LayoutTemplate, Mail } from "lucide-react";
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import { StatusPill } from "@/components/mailflow/StatusPill";
@@ -67,6 +67,7 @@ export default async function MarketingCampaignsPage() {
                 >
                   Do-not-market list
                 </Link>
+                <TemplatesLink />
                 <NewCampaignButton />
               </>
             }
@@ -170,6 +171,19 @@ function Td({ children }: { children: React.ReactNode }) {
 
 /** Points at the product's actual advantage rather than apologising for
  *  being empty — the loan book is the thing MailerLite could never do. */
+/** The template gallery, one click from where campaigns begin. */
+function TemplatesLink() {
+  return (
+    <Link
+      href="/marketing/templates"
+      className="mf-quiet flex h-[30px] items-center gap-1.5 rounded-md border border-hairline bg-surface px-2.5 text-[12px] font-semibold text-brand transition-colors hover:bg-paper-warm"
+    >
+      <LayoutTemplate size={13} strokeWidth={1.75} />
+      Start from a template
+    </Link>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="rounded-[10px] border border-dashed border-hairline bg-surface px-6 py-12 text-center">
@@ -187,9 +201,11 @@ function EmptyState() {
       </h2>
       <p className="mx-auto mt-1.5 max-w-[420px] text-[12.5px] leading-relaxed text-ink-mute">
         Start from the loan book: pick a lender, a settlement vintage or a
-        pipeline stage, and the audience is built for you.
+        pipeline stage, and the audience is built for you. Or start from one
+        of the ready-written templates and edit it.
       </p>
       <div className="mt-4 flex items-center justify-center gap-2">
+        <TemplatesLink />
         <NewCampaignButton />
       </div>
     </div>
