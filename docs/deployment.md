@@ -108,12 +108,19 @@ LoanFlow's:
   webhooks.
 - LoanFlow stops at `0011` and needs nothing beyond it.
 
-Drizzle records what it has applied in `__drizzle_migrations`, keyed on
-a hash of each file rather than its number. So pointing Mailflow at the
-database LoanFlow already migrated is safe: it recognises `0000`-`0011`
-as already applied, skips them, and applies `0012` onward. Running it
-the other way round does nothing useful, since LoanFlow has no
-migration the database is missing.
+Drizzle records what it has applied in `__drizzle_migrations`. It stores
+a hash of each file, but — contrary to what an earlier version of this
+page said — it does not decide by hash. `pg-core`'s `dialect.migrate`
+reads the single most recently applied row and replays every migration
+whose folder timestamp is **newer than that one**, all inside one
+transaction.
+
+Pointing Mailflow at the database LoanFlow already migrated is still
+safe, for a slightly different reason than the hash story implied: the
+newest row will be `0011`, Mailflow's `0000`-`0011` carry the same
+timestamps and are therefore not newer, and `0012` onward is. So it
+applies exactly the missing ones. Running it the other way round does
+nothing, since none of LoanFlow's are newer than what is already there.
 
 ### Sharing it is safe, and also not optional
 
@@ -134,13 +141,20 @@ production, rather than trusting this paragraph.
 
 ### The thing that would break this
 
-If LoanFlow ever adds a migration of its own, it becomes `0012` there
-too — a different file sharing a number with Mailflow's `0012`. Drizzle
-would apply both, because the hashes differ, and the two repos' schema
-snapshots would then each describe a database that does not exist. The
-next `drizzle-kit generate` in either repo would be computed from the
-wrong starting point and emit a migration that fails or, worse, one
-that succeeds and drops something.
+If LoanFlow ever adds a migration of its own and runs it, the failure is
+worse than a collision and much quieter than one.
+
+Because the check is "newer than the latest applied row", a single
+LoanFlow migration applied today stamps the tracking table with today's
+timestamp. Any Mailflow migration generated *before* that moment but
+not yet applied is now older than the newest row — so Mailflow's
+migrator skips it, reports success, and the table it was supposed to
+create never exists. Nothing errors. The first sign is a query failing
+against a table nobody noticed was missing.
+
+A hash-based migrator would have double-applied and thrown a loud
+"already exists". This one goes quiet instead, which is why the rule
+matters more than it looked.
 
 So, once they share a database: **schema changes go in Mailflow**. If
 LoanFlow genuinely needs a new table, add it to Mailflow's schema and

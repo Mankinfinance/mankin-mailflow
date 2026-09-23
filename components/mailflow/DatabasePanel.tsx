@@ -97,12 +97,14 @@ export function DatabasePanel({
                 style={{ color: "#8a6a22" }}
               />
               <p className="text-[11.5px] leading-relaxed text-ink-soft">
-                This will run over the connection pooler, which hands each
-                statement to a different backend — the lock that stops two
-                deploys migrating at once will not hold. It usually works and
-                occasionally hangs. Setting{" "}
+                This will run over the connection pooler. It applies
+                everything in one transaction, so it either all works or none
+                of it does — but a pooler is tuned for short queries, and a
+                first run applying twenty-odd files can hit its timeout.
+                Setting{" "}
                 <code className="mono text-[11px]">MIGRATE_DATABASE_URL</code>{" "}
-                to Supabase&apos;s direct connection removes the risk.
+                to Supabase&apos;s direct connection avoids that. Optional:
+                try without it first, and only add it if this times out.
               </p>
             </div>
           )}

@@ -32,18 +32,25 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * Migrations want a direct connection, not the pooler.
+ * Migrations prefer a direct connection, though less urgently than an
+ * earlier version of this comment claimed.
  *
- * Supabase's pooler on 6543 is transaction-mode: it hands a different
- * backend to each statement, so the session-level advisory lock the
- * migrator takes to stop two deploys migrating at once is acquired on
- * one connection and looked for on another. Symptoms range from a
- * hang to a half-applied migration.
+ * That version said drizzle takes a session-level advisory lock which
+ * the transaction-mode pooler would break. It does not take one — see
+ * pg-core's dialect.migrate: it creates the tracking table, reads the
+ * most recently applied row, and replays everything newer inside a
+ * single transaction. No lock, and because Postgres has transactional
+ * DDL, no half-applied schema either. It is all-or-nothing.
  *
- * So MIGRATE_DATABASE_URL — the direct connection on 5432 — is used
- * when set. Falling back to DATABASE_URL is deliberate: on a database
- * with no pooler in front of it they are the same string, and
- * demanding both would be ceremony.
+ * What remains is duller and real: a migration is one long transaction,
+ * and a pooler is tuned for short ones. Statement and idle timeouts are
+ * the thing that bites, especially on a first run applying twenty-odd
+ * files at once. Supabase recommends the direct connection for this for
+ * that reason.
+ *
+ * So MIGRATE_DATABASE_URL is used when set and DATABASE_URL otherwise —
+ * a fallback rather than a requirement, because on a database with no
+ * pooler in front of it they are the same string.
  */
 function migrationUrl(): string | null {
   return process.env.MIGRATE_DATABASE_URL ?? process.env.DATABASE_URL ?? null;
