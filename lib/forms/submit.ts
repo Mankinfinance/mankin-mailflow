@@ -1,5 +1,6 @@
 import "server-only";
 import { repos } from "@/lib/db/repos";
+import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { auditLog } from "@/lib/audit";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import type { Deal } from "@/lib/clients/salestrekker/types";
@@ -133,12 +134,37 @@ export async function submitForm(
     userAgent: input.userAgent ?? null,
   });
 
+  /* The enquiry itself, announced before any of the CRM work below.
+     A lead is the one thing here worth money, and it must reach
+     whatever is listening even when deal creation fails — that is
+     precisely the case where somebody needs to pick up the phone
+     manually. `dealRef` is filled in afterwards when there is one. */
+  async function announce(dealRef: string | null, dealError: string | null) {
+    await emitWebhook("form.submitted", {
+      formId: form.id,
+      formName: form.name,
+      submissionId: submission.id,
+      name: submission.name,
+      email: submission.email,
+      phone: submission.phone,
+      answers: input.answers,
+      pageId: submission.pageId,
+      dealRef,
+      /* Named rather than hidden: a receiver that sees a lead with no
+         deal reference should know whether that was the form's design
+         or a failure it needs to chase. */
+      dealCreated: dealRef !== null,
+      dealError,
+    });
+  }
+
   if (config.destination.kind === "register-only") {
     await auditLog({
       actor: { type: "system" },
       action: "form.submit",
       meta: { formId: form.id, destination: "register-only" },
     });
+    await announce(null, null);
     return { ok: true, thanks: config.thanks, dealRef: null };
   }
 
@@ -156,6 +182,7 @@ export async function submitForm(
       dealId,
       meta: { formId: form.id, appRef, formName: form.name },
     });
+    await announce(appRef, null);
     return { ok: true, thanks: config.thanks, dealRef: appRef };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -171,6 +198,7 @@ export async function submitForm(
       action: "form.submit.deal_failed",
       meta: { formId: form.id, error: message.slice(0, 200) },
     });
+    await announce(null, message.slice(0, 200));
     return { ok: true, thanks: config.thanks, dealRef: null };
   }
 }

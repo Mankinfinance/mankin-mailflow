@@ -205,6 +205,33 @@ export async function dispatchCampaignBatch(
       failed: totals.failed,
       skipped: totals.skipped,
     });
+
+    /* A campaign that tried to send and delivered nothing is broken,
+       not merely disappointing: expired Graph credentials, a blocked
+       mailbox, a domain that stopped authenticating. campaign.sent
+       carries the numbers, but it reads like a success and nothing in
+       the product says this out loud. A separate event exists so it
+       can be routed somewhere that interrupts a person.
+
+       Only when something was attempted — a campaign whose whole
+       audience was suppressed sent nothing and is working correctly. */
+    if (totals.sent === 0 && totals.failed > 0) {
+      const worst = await campaignRepo.listRecipients(campaign.id, {
+        statuses: ["failed"],
+        limit: 1,
+      });
+      await emitWebhook("campaign.failed", {
+        campaignId: campaign.id,
+        name: campaign.name,
+        subject: campaign.subject,
+        failed: totals.failed,
+        skipped: totals.skipped,
+        /* One representative error. They are nearly always identical —
+           the same credential, the same mailbox — and a receiver that
+           wants all of them can read the campaign. */
+        error: worst[0]?.error ?? null,
+      });
+    }
   }
 
   await auditLog({

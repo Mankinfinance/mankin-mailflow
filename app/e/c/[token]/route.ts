@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { repos } from "@/lib/db/repos";
+import { emitWebhook } from "@/lib/webhooks/dispatch";
 import {
   safeRedirectTarget,
   verifyTrackingToken,
@@ -55,12 +56,33 @@ export async function GET(
       const recipient = await repos().campaign.findRecipient(cid, em);
       if (recipient) {
         const now = new Date();
+        const firstClick = recipient.clickedAt === null;
         await repos().campaign.updateRecipient(recipient.id, {
           clickedAt: recipient.clickedAt ?? now,
           // A click proves the email was opened, whatever the pixel did
           // or didn't manage to report.
           openedAt: recipient.openedAt ?? now,
         });
+
+        /* Once per person per campaign, not once per click. The fact a
+           broker acts on is "this client is interested" — a second
+           click on the same link an hour later is the same fact, and
+           firing again would make the event useless for an alert. The
+           report still has every click. */
+        if (firstClick) {
+          const campaign = await repos().campaign.get(cid);
+          await emitWebhook("contact.clicked", {
+            campaignId: cid,
+            campaignName: campaign?.name ?? null,
+            email: em,
+            name: recipient.name || null,
+            // Which link, because "clicked the booking link" and
+            // "clicked the unsubscribe-adjacent footer" are not the
+            // same signal.
+            url: target,
+            clickedAt: now.toISOString(),
+          });
+        }
       }
     }
   } catch (err) {
