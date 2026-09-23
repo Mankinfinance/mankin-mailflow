@@ -3,6 +3,23 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 /* Contact data carries real-looking addresses so the privacy test can
    look for them. */
+// No real DNS in tests: the answer below is the evaluator's, on fixed records.
+vi.mock("@/lib/campaigns/sender-auth", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/campaigns/sender-auth")>();
+  return {
+    ...real,
+    checkSenderAuth: async (domain: string) =>
+      real.evaluateSenderAuth({
+        domain,
+        txt: ["v=spf1 include:spf.protection.outlook.com -all"],
+        dmarc: ["v=DMARC1; p=none"],
+        selector1: "none",
+        selector2: "none",
+        appUrl: "https://mankin-mailflow.vercel.app",
+      }),
+  };
+});
+
 vi.mock("@/lib/settlements-store", () => ({
   listSettlements: async () => [
     {
@@ -181,6 +198,15 @@ describe("the tools", () => {
 
     await repos().campaign.unsuppress("tom.reilly@example.com");
     await repos().campaign.remove(campaign.id);
+  });
+
+  it("reports the sending domain's DNS checks with their fixes", async () => {
+    const { result } = await runTool("sending_domain", {});
+    const r = result as { authenticated: boolean; checks: Array<{ label: string; status: string; fix: string }> };
+    expect(r.authenticated).toBe(false);
+    const dkim = r.checks.find((c) => c.label === "DKIM");
+    expect(dkim?.status).toBe("fail");
+    expect(dkim?.fix).toContain("security.microsoft.com");
   });
 
   it("report setup as presence, never values", async () => {

@@ -10,6 +10,8 @@ import { AutomationFlowSchema } from "@/lib/automations/types";
 import { describeTriggerFor } from "@/lib/automations/lifecycle";
 import { SurveyConfigSchema } from "@/lib/surveys/types";
 import { summariseNps, describeNps } from "@/lib/surveys/scoring";
+import { checkSenderAuth } from "@/lib/campaigns/sender-auth";
+import { senderDomain } from "@/lib/mailflow/sending-config";
 
 /**
  * What the assistant can look up.
@@ -130,6 +132,30 @@ export const TOOLS = {
            link in every email goes to the wrong app. Unset, links fall
            back to localhost. */
         addressInEmailLinks: process.env.NEXT_PUBLIC_APP_URL ?? null,
+      };
+    },
+  }),
+
+  sending_domain: spec({
+    activity: "Checking the sending domain",
+    definition: {
+      name: "sending_domain",
+      description:
+        "What public DNS says about the sending domain: SPF, DKIM (Microsoft 365 selector1/selector2) and DMARC, plus whether links in emails use the firm's own domain rather than a vercel.app address. Each check has a status and the fix. Use this whenever someone asks about spam, the junk folder or deliverability.",
+      input_schema: { type: "object", properties: {} },
+    },
+    input: z.object({}),
+    run: async () => {
+      const auth = await checkSenderAuth(senderDomain(null));
+      return {
+        domain: auth.domain,
+        authenticated: auth.authenticated,
+        checks: auth.checks.map(({ label, status, detail, fix }) => ({
+          label,
+          status,
+          detail,
+          fix,
+        })),
       };
     },
   }),

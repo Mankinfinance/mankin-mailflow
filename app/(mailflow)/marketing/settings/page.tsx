@@ -1,14 +1,11 @@
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
-import {
-  Card,
-  Eyebrow,
-  MailflowContent,
-  PageTitle,
-} from "@/components/mailflow/MailflowPage";
+import { MailflowContent, PageTitle } from "@/components/mailflow/MailflowPage";
 import { SettingsForm } from "@/components/mailflow/SettingsForm";
 import { SignatureForm } from "@/components/mailflow/SignatureForm";
 import { DatabasePanel } from "@/components/mailflow/DatabasePanel";
+import { SenderAuthCard } from "@/components/mailflow/SenderAuthCard";
+import { checkSenderAuth } from "@/lib/campaigns/sender-auth";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { listSettlements } from "@/lib/settlements-store";
@@ -57,7 +54,7 @@ export default async function MailflowSettingsPage() {
       Boolean(env.unsubscribeMailto?.trim()),
   };
 
-  const domain = senderDomain(broker.email);
+  const senderAuth = await checkSenderAuth(senderDomain(broker.email));
   const runsPerDay = scheduledRunsPerDay();
 
   return (
@@ -85,28 +82,7 @@ export default async function MailflowSettingsPage() {
             }
           />
 
-          {/* Read-only, because the app cannot honestly claim otherwise. */}
-          <Card className="mb-3.5 max-w-[640px]">
-            <Eyebrow>Sending domain</Eyebrow>
-            <p className="mono mt-1 text-[13px] text-brand-deep">{domain}</p>
-            <p className="mt-2 text-[12px] leading-relaxed text-ink-mute">
-              Mail goes out through Microsoft 365 from each broker&apos;s own
-              mailbox, so this follows the tenant rather than anything set
-              here.
-            </p>
-            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-soft">
-              Whether SPF, DKIM and DMARC actually pass is a DNS question this
-              app cannot answer for itself — it would only be repeating back
-              what someone typed. Check it at the source before the first
-              campaign:
-            </p>
-            <p className="mono mt-1.5 text-[11px] text-ink-mute">
-              dig TXT {domain} · dig TXT _dmarc.{domain}
-            </p>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
-              The full sequence is in docs/deliverability.md.
-            </p>
-          </Card>
+          <SenderAuthCard auth={senderAuth} />
 
           <SettingsForm
             initial={settings}

@@ -37,6 +37,9 @@ import {
   type HealthMetric,
 } from "@/lib/mailflow/sending-health";
 
+import { checkSenderAuth } from "@/lib/campaigns/sender-auth";
+import { senderDomain } from "@/lib/mailflow/sending-config";
+
 export const metadata = { title: "Mailflow · Mankin Finance" };
 
 /**
@@ -51,6 +54,8 @@ export const metadata = { title: "Mailflow · Mankin Finance" };
  */
 export default async function MailflowDashboard() {
   const broker = await currentBroker();
+  // Started now, read at render, so the DNS lookups overlap the queries.
+  const senderAuthPending = checkSenderAuth(senderDomain(broker.email));
 
   const [campaigns, suppressions, settlements, deals, automations, forms] =
     await Promise.all([
@@ -152,12 +157,22 @@ export default async function MailflowDashboard() {
     since: thirtyDaysAgo,
   });
 
+  const senderAuth = await senderAuthPending;
+
   return (
     <>
       <MailflowNav
         active="dashboard"
         footer={
-          <SendingDomainHealth domain="mankinfinance.com" authenticated />
+          <SendingDomainHealth
+            domain={senderAuth.domain}
+            authenticated={
+              senderAuth.checks.some((c) => c.status === "unknown") &&
+              !senderAuth.authenticated
+                ? null
+                : senderAuth.authenticated
+            }
+          />
         }
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

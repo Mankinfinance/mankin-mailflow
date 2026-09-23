@@ -142,16 +142,21 @@ export function MailflowNav({ active, footer }: MailflowNavProps) {
   );
 }
 
-/** Sending-domain health — the dashboard's footer slot. */
+/** Sending-domain health — the dashboard's footer slot. Links to the
+ *  Settings card that says what is missing and how to fix it. */
 export function SendingDomainHealth({
   domain,
   authenticated,
 }: {
   domain: string;
-  authenticated: boolean;
+  /** Null when DNS could not be read, which is not the same as failing. */
+  authenticated: boolean | null;
 }) {
   return (
-    <div className="rounded-md border border-hairline bg-paper px-2.5 py-2">
+    <Link
+      href="/marketing/settings#sending-domain"
+      className="block rounded-md border border-hairline bg-paper px-2.5 py-2 transition-colors hover:bg-paper-warm"
+    >
       <div className="mb-1 text-[9.5px] font-bold uppercase tracking-[0.12em] text-ink-faint">
         Sending domain
       </div>
@@ -160,13 +165,17 @@ export function SendingDomainHealth({
         <span
           className={cn(
             "h-1.5 w-1.5 rounded-full",
-            authenticated ? "bg-ok" : "bg-warn",
+            authenticated ? "bg-ok" : authenticated === false ? "bg-warn" : "bg-ink-faint",
           )}
         />
         <span className="text-[10px] text-ink-mute">
-          {authenticated ? "Authenticated" : "Not verified"}
+          {authenticated
+            ? "Authenticated"
+            : authenticated === false
+              ? "Needs attention"
+              : "Could not check"}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
