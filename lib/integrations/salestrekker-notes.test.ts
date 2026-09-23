@@ -10,6 +10,7 @@ const { noteFor, isNotedEvent, noteOnSalestrekker } = await import(
   "./salestrekker-notes"
 );
 const { repos } = await import("@/lib/db/repos");
+import type { AudienceSource } from "@/lib/campaigns/types";
 
 beforeEach(async () => {
   addNote.mockReset();
@@ -19,8 +20,14 @@ beforeEach(async () => {
   }
 });
 
-/** A campaign with one recipient sourced from the given place. */
-async function campaignWith(sourceKind: string, sourceId: string) {
+/**
+ * A campaign with one recipient sourced from the given place.
+ *
+ * Typed as AudienceSource. These fixtures were once plain strings
+ * carrying "deal", which matched the equally wrong code and let a
+ * never-fires bug pass every test.
+ */
+async function campaignWith(sourceKind: AudienceSource, sourceId: string) {
   const campaign = await repos().campaign.create({
     name: "Rate review",
     subject: "Worth a look",
@@ -111,7 +118,7 @@ describe("what the note says", () => {
 
 describe("finding the file to write on", () => {
   it("writes to the deal a recipient came from", async () => {
-    const campaign = await campaignWith("deal", "deal-123");
+    const campaign = await campaignWith("deals", "deal-123");
 
     const result = await noteOnSalestrekker("contact.clicked", {
       campaignId: campaign.id,
@@ -184,7 +191,7 @@ describe("payload keys match what the events actually send", () => {
   });
 
   it("finds the file from a bounce's campaign", async () => {
-    const campaign = await campaignWith("deal", "deal-456");
+    const campaign = await campaignWith("deals", "deal-456");
     const result = await noteOnSalestrekker("contact.bounced", {
       email: "sarah@example.com",
       campaignId: campaign.id,
@@ -192,5 +199,73 @@ describe("payload keys match what the events actually send", () => {
     });
     expect(result.noted).toBe(true);
     expect(addNote.mock.calls[0][1]).toContain("550 5.1.1 mailbox unavailable");
+  });
+});
+
+describe("against the real audience resolver", () => {
+  /* The test that would have caught the "deal" / "deals" bug. Every
+     other fixture in this file is hand-written, and a hand-written
+     fixture agrees with whatever the code under test believes. This
+     one takes its source kind from resolveAudience itself — the code
+     that writes campaign recipients in production. */
+  it("notes a pipeline contact exactly as the resolver produces them", async () => {
+    const { resolveAudience } = await import("@/lib/campaigns/audience");
+    const { defaultAudienceFilter } = await import("@/lib/campaigns/types");
+
+    const { members } = resolveAudience({
+      filter: {
+        ...defaultAudienceFilter(),
+        sources: ["deals"],
+        loanStatus: ["active"],
+      },
+      settlements: [],
+      deals: [
+        {
+          id: "D-77",
+          name: "Tom Reilly",
+          email: "tom@example.com",
+          brokerId: "mm",
+          stageId: "lodged",
+          lender: "Westpac",
+          loanAmount: 500000,
+          daysSinceContact: 40,
+          nurturedAt: null,
+          excludeFromDailyUpdates: false,
+          applicants: [],
+        } as never,
+      ],
+      today: new Date("2026-09-23T00:00:00Z"),
+    });
+    expect(members).toHaveLength(1);
+
+    const campaign = await repos().campaign.create({
+      name: "Pipeline nudge",
+      subject: "Checking in",
+      body: "Hi",
+      status: "sent",
+      audience: {},
+      fromBrokerId: "mm",
+      createdBy: "mm",
+    });
+    const m = members[0];
+    await repos().campaign.setRecipients(campaign.id, [
+      {
+        campaignId: campaign.id,
+        email: m.email,
+        name: m.name,
+        firstName: m.firstName,
+        sourceKind: m.sourceKind,
+        sourceId: m.sourceId,
+      },
+    ]);
+
+    const result = await noteOnSalestrekker("contact.clicked", {
+      campaignId: campaign.id,
+      email: m.email,
+      campaignName: "Pipeline nudge",
+    });
+
+    expect(result).toEqual({ noted: true });
+    expect(addNote.mock.calls[0][0]).toBe("D-77");
   });
 });

@@ -2,6 +2,7 @@ import "server-only";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { repos } from "@/lib/db/repos";
 import type { WebhookEvent } from "@/lib/webhooks/types";
+import type { AudienceSource } from "@/lib/campaigns/types";
 
 /**
  * Writing campaign activity back onto the client's file.
@@ -21,6 +22,18 @@ import type { WebhookEvent } from "@/lib/webhooks/types";
  * Every failure is swallowed and logged. A note is a courtesy; losing
  * an unsubscribe because a CRM was down would be a far worse trade.
  */
+
+/**
+ * The source kind that means "this contact has a deal to write on".
+ *
+ * Typed against AudienceSource rather than written as a bare string,
+ * because the bare string was wrong: the first version of this file
+ * compared against "deal", the resolver writes "deals", and no note
+ * would ever have been written in production. The tests passed because
+ * their fixtures carried the same wrong value. A typo here is now a
+ * compile error.
+ */
+const DEAL_SOURCE: AudienceSource = "deals";
 
 /** Events that earn a line on the file. The rest are noise there. */
 const NOTED: WebhookEvent[] = [
@@ -106,7 +119,7 @@ async function dealIdFor(
 
   const recipient = await repos().campaign.findRecipient(campaignId, email);
   if (!recipient) return null;
-  return recipient.sourceKind === "deal" ? recipient.sourceId : null;
+  return recipient.sourceKind === DEAL_SOURCE ? recipient.sourceId : null;
 }
 
 export interface NoteResult {

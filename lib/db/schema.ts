@@ -883,7 +883,9 @@ export const campaignRecipients = pgTable(
     /** First name used for the greeting merge field. */
     firstName: text("first_name").notNull().default(""),
 
-    /** settlement | deal — where this contact came from. */
+    /** settlements | deals — where this contact came from. Plural, as
+     *  AudienceSource defines it. This comment used to say "settlement
+     *  | deal", and code written against the comment was wrong. */
     sourceKind: text("source_kind").notNull(),
     /** Settlement id or deal id, for drilling back to the record. */
     sourceId: text("source_id").notNull(),
