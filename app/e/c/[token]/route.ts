@@ -2,6 +2,12 @@ import { redirect } from "next/navigation";
 import { repos } from "@/lib/db/repos";
 import { emitWebhook } from "@/lib/webhooks/dispatch";
 import {
+  findTrackedMessage,
+  linkClickKey,
+  messageFields,
+  parseTrackingId,
+} from "@/lib/campaigns/tracked-message";
+import {
   safeRedirectTarget,
   verifyTrackingToken,
 } from "@/lib/campaigns/tracking";
@@ -47,35 +53,38 @@ export async function GET(
 
     if (verified.ok) {
       const { cid, em } = verified.claims;
+      const subject = parseTrackingId(cid);
       // Which link, not just that there was one — the report's link
       // table is the difference between "17% clicked" and "17% clicked
       // the booking link".
       if (target) {
-        await repos().campaign.recordLinkClick(cid, target);
+        await repos().campaign.recordLinkClick(linkClickKey(subject), target);
       }
-      const recipient = await repos().campaign.findRecipient(cid, em);
-      if (recipient) {
+
+      /* Campaign or automation. This used to look for a campaign
+         recipient only, so a click in an automation email recorded
+         nothing — and every "if they clicked" step answered "no". */
+      const message = await findTrackedMessage(cid, em);
+      if (message) {
         const now = new Date();
-        const firstClick = recipient.clickedAt === null;
-        await repos().campaign.updateRecipient(recipient.id, {
-          clickedAt: recipient.clickedAt ?? now,
+        const firstClick = message.clickedAt === null;
+        await message.record({
+          clickedAt: message.clickedAt ?? now,
           // A click proves the email was opened, whatever the pixel did
           // or didn't manage to report.
-          openedAt: recipient.openedAt ?? now,
+          openedAt: message.openedAt ?? now,
         });
 
-        /* Once per person per campaign, not once per click. The fact a
+        /* Once per person per email, not once per click. The fact a
            broker acts on is "this client is interested" — a second
            click on the same link an hour later is the same fact, and
            firing again would make the event useless for an alert. The
            report still has every click. */
         if (firstClick) {
-          const campaign = await repos().campaign.get(cid);
           await emitWebhook("contact.clicked", {
-            campaignId: cid,
-            campaignName: campaign?.name ?? null,
+            ...messageFields(message),
             email: em,
-            name: recipient.name || null,
+            name: message.name,
             // Which link, because "clicked the booking link" and
             // "clicked the unsubscribe-adjacent footer" are not the
             // same signal.

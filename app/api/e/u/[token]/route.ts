@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { repos } from "@/lib/db/repos";
-import { auditLog } from "@/lib/audit";
 import { verifyTrackingToken } from "@/lib/campaigns/tracking";
+import { recordUnsubscribe } from "@/lib/campaigns/unsubscribe";
 
 /**
  * One-click unsubscribe (RFC 8058).
@@ -32,25 +31,11 @@ export async function POST(
     if (!verified.ok) return NextResponse.json({ ok: true });
 
     const { cid, em } = verified.claims;
-    await repos().campaign.suppress({
-      email: em,
-      reason: "unsubscribe",
-      campaignId: cid,
-      addedBy: "customer",
-    });
-
-    const recipient = await repos().campaign.findRecipient(cid, em);
-    if (recipient && recipient.unsubscribedAt === null) {
-      await repos().campaign.updateRecipient(recipient.id, {
-        unsubscribedAt: new Date(),
-      });
-    }
-
-    await auditLog({
-      actor: { type: "system" },
-      action: "campaign.unsubscribe.one_click",
-      meta: { campaignId: cid, email: em },
-    });
+    /* The same function the confirm page uses. This route used to do
+       its own thing and never emitted contact.unsubscribed, so an
+       opt-out through the mail client's own button reached no other
+       system. */
+    await recordUnsubscribe({ cid, email: em, via: "one-click" });
   } catch (err) {
     console.error("[one-click unsubscribe] failed", err);
   }

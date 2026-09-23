@@ -3,7 +3,11 @@
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
 import { emitWebhook } from "@/lib/webhooks/dispatch";
-import { SurveyAnswersSchema, SurveyConfigSchema } from "@/lib/surveys/types";
+import {
+  SurveyAnswersSchema,
+  SurveyConfigSchema,
+  npsBucket,
+} from "@/lib/surveys/types";
 import { verifySurveyToken } from "@/lib/surveys/token";
 
 /**
@@ -83,15 +87,28 @@ export async function submitSurveyAction(
     ? (clean[commentQuestion.id] ?? "")
     : "";
 
-  await emitWebhook("survey.responded", {
+  const nps = score !== null && Number.isFinite(score) ? score : null;
+  const response = {
     surveyId: survey.id,
     surveyName: survey.name,
     email: verified.claims.em,
     name: verified.claims.nm,
-    nps: Number.isFinite(score) ? score : null,
+    /* From the signed link. Without it the answer names an address and
+       nothing else, and the Salestrekker note has no file to go on —
+       which is how survey notes first shipped: announced, never
+       written. Links sent before this existed carry none. */
+    dealId: verified.claims.did ?? null,
+    nps,
     comment,
     answers: clean,
-  });
+  };
+  await emitWebhook("survey.responded", response);
+
+  /* npsBucket rather than a threshold typed out here, so "detractor"
+     means the same thing in this event as in the survey report. */
+  if (nps !== null && npsBucket(Math.round(nps)) === "detractor") {
+    await emitWebhook("survey.detractor", response);
+  }
 
   /* Logged as "system" with the respondent in the metadata, because the
      audit Actor union's only customer variant is deal-scoped and a

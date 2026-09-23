@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { repos } from "@/lib/db/repos";
 import { noteOnSalestrekker } from "@/lib/integrations/salestrekker-notes";
 import { checkWebhookUrl } from "./safe-url";
@@ -53,13 +54,17 @@ export async function emitWebhook(
      It does not accept an envelope over HTTP, so it cannot be an
      endpoint row; what it has is an API and a notes field. Handled
      here rather than at each emit site so a new event gets it for
-     free, and awaited rather than queued because addNote is a single
-     call against a system we already depend on being up.
+     free.
 
-     Before the queue, deliberately: if one of the two has to happen
-     first, the broker's own file is the one that matters. */
+     After the response, not before it. The first version awaited the
+     note inline, which put Salestrekker's API between a customer and
+     their unsubscribe confirmation, and between a click and the page
+     it was taking them to — the exact thing this module's queue exists
+     to prevent. `after` runs it once the response has gone. Outside a
+     request (a test, a script) there is no response to wait for, and
+     it runs inline. */
   if (salestrekkerNotesEnabled()) {
-    await noteOnSalestrekker(event, data);
+    runAfterResponse(() => noteOnSalestrekker(event, data));
   }
 
   try {
@@ -279,4 +284,24 @@ async function readCappedBody(response: Response): Promise<string | null> {
  */
 export function salestrekkerNotesEnabled(): boolean {
   return process.env.SALESTREKKER_NOTES !== "false";
+}
+
+/**
+ * Run work once the response has been sent, or now if there is no
+ * response to wait for.
+ *
+ * `after` throws outside a request scope (verified in
+ * next/dist/server/after/after.js). The inline fallback is awaited by
+ * nobody on purpose: its callers already swallow their own errors, and
+ * the promise is attached to a catch so a rejection cannot surface as
+ * unhandled.
+ */
+function runAfterResponse(work: () => Promise<unknown>): void {
+  try {
+    after(work);
+  } catch {
+    void work().catch((err) =>
+      console.error("[webhooks] background work failed", err),
+    );
+  }
 }

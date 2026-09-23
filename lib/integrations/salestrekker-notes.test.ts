@@ -269,3 +269,63 @@ describe("against the real audience resolver", () => {
     expect(addNote.mock.calls[0][0]).toBe("D-77");
   });
 });
+
+describe("automation notes", () => {
+  it("puts the milestone on the file in the canvas's own words", () => {
+    expect(
+      noteFor("automation.entered", {
+        automationName: "Annual review",
+        triggerDescription: "A loan passes its 12-month settlement anniversary",
+      }),
+    ).toBe(
+      'Started the "Annual review" sequence: a loan passes its 12-month settlement anniversary.',
+    );
+  });
+
+  it("writes the milestone onto the deal the run came from", async () => {
+    const result = await noteOnSalestrekker("automation.entered", {
+      automationName: "Pre-approval going cold",
+      triggerDescription: "A deal has been at Pre-Approval for 60 days",
+      dealId: "D-12",
+    });
+    expect(result.noted).toBe(true);
+    expect(addNote).toHaveBeenCalledWith(
+      "D-12",
+      'Started the "Pre-approval going cold" sequence: a deal has been at Pre-Approval for 60 days.',
+    );
+  });
+
+  it("closes with the exit step's note, which says what the ending means", () => {
+    expect(
+      noteFor("automation.completed", {
+        automationName: "Annual review",
+        outcome:
+          "Opened, nothing further. The broker picks it up from the pipeline instead.",
+      }),
+    ).toBe(
+      'Finished the "Annual review" sequence. Opened, nothing further. The broker picks it up from the pipeline instead.',
+    );
+  });
+
+  it("still closes cleanly without one", () => {
+    expect(
+      noteFor("automation.completed", { automationName: "Annual review" }),
+    ).toBe('Finished the "Annual review" sequence.');
+  });
+
+  it("names the sequence when a click came from one", () => {
+    expect(
+      noteFor("contact.clicked", {
+        automationName: "Annual review",
+        url: "https://tidycal.com/book",
+      }),
+    ).toBe('Clicked a link in "Annual review": https://tidycal.com/book');
+  });
+
+  it("does not note an exit or a detractor, which would say things twice", () => {
+    // An unsubscribe is noted by contact.unsubscribed; a detractor's
+    // score by survey.responded.
+    expect(isNotedEvent("automation.exited")).toBe(false);
+    expect(isNotedEvent("survey.detractor")).toBe(false);
+  });
+});

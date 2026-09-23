@@ -485,6 +485,10 @@ export interface AutomationRepo {
     automationId: string,
     email: string,
   ): Promise<AutomationSendRow | null>;
+  /** One send by id — what a tracking link names. */
+  getSend(id: string): Promise<AutomationSendRow | null>;
+  /** One run by id, for the contact a send was made to. */
+  getRun(id: string): Promise<AutomationRunRow | null>;
   updateSend(id: string, patch: Partial<NewAutomationSend>): Promise<void>;
   /** Per-node totals for the canvas. */
   nodeStats(automationId: string): Promise<AutomationNodeStats[]>;
@@ -2368,7 +2372,13 @@ function realRepos(): RepoBundle {
             .select()
             .from(automationSends)
             .where(eq(automationSends.runId, runId))
-            .orderBy(desc(automationSends.sentAt))
+            /* NULLS LAST, explicitly. Postgres sorts NULL first under
+               DESC, so without it one failed step (no sentAt) would be
+               "the latest send" for the rest of the run, and every
+               later condition would judge the failure instead of the
+               email the contact actually received. The mock sorts nulls
+               last, which is why no test ever saw it. */
+            .orderBy(sql`${automationSends.sentAt} desc nulls last`)
             .limit(1);
           return row ?? null;
         } catch (err) {
@@ -2388,7 +2398,36 @@ function realRepos(): RepoBundle {
                 eq(automationSends.email, email.toLowerCase()),
               ),
             )
-            .orderBy(desc(automationSends.sentAt))
+            // NULLS LAST for the same reason as latestSendForRun.
+            .orderBy(sql`${automationSends.sentAt} desc nulls last`)
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async getSend(id) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(automationSends)
+            .where(eq(automationSends.id, id))
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async getRun(id) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(automationRuns)
+            .where(eq(automationRuns.id, id))
             .limit(1);
           return row ?? null;
         } catch (err) {
@@ -4118,6 +4157,12 @@ function mockRepos(): RepoBundle {
             .filter((r) => r.automationId === automationId && r.email === lowered)
             .sort((a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0))[0] ?? null
         );
+      },
+      async getSend(id) {
+        return mockAutomationSendStore.get(id) ?? null;
+      },
+      async getRun(id) {
+        return mockRunStore.get(id) ?? null;
       },
       async updateSend(id, patch) {
         const existing = mockAutomationSendStore.get(id);

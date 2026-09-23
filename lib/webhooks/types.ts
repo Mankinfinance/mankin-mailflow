@@ -34,6 +34,21 @@ export const WebhookEventSchema = z.enum([
    *  broken — credentials, the mailbox, the domain — and nothing else
    *  in the product says so out loud. */
   "campaign.failed",
+  /** A trigger fired and enrolled someone: a settlement anniversary, an
+   *  equity milestone, a deal stuck at a stage. The milestone is the
+   *  news, whether or not the email that follows is ever opened. */
+  "automation.entered",
+  /** A sequence reached an end its author drew, on whichever branch.
+   *  Carries the exit step's own note ("Opened, broker picks it up"),
+   *  which says what this ending means in the author's words. */
+  "automation.completed",
+  /** Something outside the sequence stopped it: an unsubscribe, or a
+   *  flow that could not run. `reason` says which. */
+  "automation.exited",
+  /** An NPS answer of 0–6. A subset of survey.responded, as its own
+   *  event because endpoints subscribe per event: routing detractors
+   *  to an alert channel should not mean receiving every answer. */
+  "survey.detractor",
 ]);
 
 export type WebhookEvent = z.infer<typeof WebhookEventSchema>;
@@ -46,6 +61,10 @@ export const WEBHOOK_EVENT_LABELS: Record<WebhookEvent, string> = {
   "form.submitted": "A form is submitted",
   "contact.clicked": "Someone clicks for the first time",
   "campaign.failed": "A campaign sends nothing at all",
+  "automation.entered": "A trigger enrols someone",
+  "automation.completed": "A sequence reaches its end",
+  "automation.exited": "A sequence is stopped",
+  "survey.detractor": "A survey scores 0–6",
 };
 
 export const WEBHOOK_EVENT_BLURBS: Record<WebhookEvent, string> = {
@@ -60,6 +79,14 @@ export const WEBHOOK_EVENT_BLURBS: Record<WebhookEvent, string> = {
     "Fires once per person per campaign, with the link they clicked — a client showing interest, not a report line.",
   "campaign.failed":
     "Every send failed. Worth waking someone for: it means nothing is going out.",
+  "automation.entered":
+    "The milestone that fired — anniversary, equity, stuck deal — with the contact and their deal. The phone call, before the email is even read.",
+  "automation.completed":
+    "Reached an end the sequence was built with, and which one — \"opened, broker picks it up\" or \"followed up once\". The follow-up list.",
+  "automation.exited":
+    "Stopped by something outside the sequence: they unsubscribed, or it could not run. Carries the reason.",
+  "survey.detractor":
+    "Only the unhappy answers, so an alert channel gets these and nothing else.",
 };
 
 /**

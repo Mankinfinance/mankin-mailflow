@@ -1,4 +1,4 @@
-import { repos } from "@/lib/db/repos";
+import { findTrackedMessage } from "@/lib/campaigns/tracked-message";
 import { verifyTrackingToken } from "@/lib/campaigns/tracking";
 
 /**
@@ -46,11 +46,12 @@ export async function GET(
     const verified = await verifyTrackingToken(token, "open");
     if (verified.ok) {
       const { cid, em } = verified.claims;
-      const recipient = await repos().campaign.findRecipient(cid, em);
-      if (recipient && recipient.openedAt === null) {
-        await repos().campaign.updateRecipient(recipient.id, {
-          openedAt: new Date(),
-        });
+      /* Campaign or automation — the shared lookup knows both. This
+         used to ask for a campaign recipient only, so opens in
+         automation emails were never recorded. */
+      const message = await findTrackedMessage(cid, em);
+      if (message && message.openedAt === null) {
+        await message.record({ openedAt: new Date() });
       }
     }
   } catch (err) {

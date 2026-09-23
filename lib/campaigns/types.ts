@@ -21,6 +21,23 @@ import { z } from "zod";
 export const AudienceSourceSchema = z.enum(["settlements", "deals"]);
 export type AudienceSource = z.infer<typeof AudienceSourceSchema>;
 
+/**
+ * The Salestrekker deal a contact belongs to, when they came from the
+ * pipeline; null for the settled back-book, which has no open deal.
+ *
+ * One definition, compared against the schema's own enum member rather
+ * than a typed-out string. Three places need this answer, and the
+ * first one written compared against "deal" when the resolver stores
+ * "deals" — so the Salestrekker notes built on it never fired. Renaming
+ * the enum member now breaks the build instead of the feature.
+ */
+export function dealIdForSource(
+  sourceKind: string,
+  sourceId: string,
+): string | null {
+  return sourceKind === AudienceSourceSchema.enum.deals ? sourceId : null;
+}
+
 export const LoanStatusSchema = z.enum(["active", "closed", "discharged"]);
 
 /**

@@ -8,10 +8,12 @@ import { sendMimeViaGraph } from "@/lib/clients/outlook-mime";
 import { renderCampaign } from "@/lib/campaigns/merge";
 import { buildRecipientLinks } from "@/lib/campaigns/tracking";
 import { resolveAudience } from "@/lib/campaigns/audience";
-import { defaultAudienceFilter } from "@/lib/campaigns/types";
+import { defaultAudienceFilter, dealIdForSource } from "@/lib/campaigns/types";
+import { automationTrackingId } from "@/lib/campaigns/tracked-message";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import type { AutomationRow, AutomationRunRow } from "@/lib/db/schema";
 import { AutomationFlowSchema } from "./types";
+import { announceEntered, announceEnded, describeTriggerFor } from "./lifecycle";
 import { nextAction, type ContactFacts, type RunPosition } from "./engine";
 import { surveyLink } from "@/lib/surveys/token";
 import {
@@ -266,6 +268,12 @@ async function enrol(
   });
 
   let enrolled = 0;
+  /* Worked out once per pass, and only when somebody is actually being
+     enrolled — a form-triggered sequence would otherwise look its form
+     up on every tick for nobody. */
+  const triggerDescription =
+    hits.length > 0 ? await describeTriggerFor(flow.data.trigger) : "";
+
   for (const hit of hits) {
     const run = await repos().automation.startRun({
       automationId: automation.id,
@@ -281,7 +289,17 @@ async function enrol(
       // or start a delay.
       nextRunAt: now,
     });
-    if (run) enrolled += 1;
+    /* startRun returns null for someone already enrolled, so this
+       announces each person once per sequence, not once per tick. */
+    if (run) {
+      enrolled += 1;
+      await announceEntered({
+        automation,
+        run,
+        trigger: flow.data.trigger,
+        triggerDescription,
+      });
+    }
   }
   return enrolled;
 }
@@ -303,11 +321,13 @@ async function advanceRun(
 
   const parsed = AutomationFlowSchema.safeParse(automation.flow);
   if (!parsed.success) {
+    const error = "The sequence is malformed and could not be read.";
     await repos().automation.updateRun(run.id, {
       status: "done",
-      error: "The sequence is malformed and could not be read.",
+      error,
       finishedAt: now,
     });
+    await announceEnded({ automation, run, now, ending: { kind: "broken", error } });
     return outcome;
   }
   const flow = parsed.data;
@@ -322,6 +342,7 @@ async function advanceRun(
       error: "Unsubscribed during the sequence.",
       finishedAt: now,
     });
+    await announceEnded({ automation, run, now, ending: { kind: "unsubscribed" } });
     outcome.exited += 1;
     return outcome;
   }
@@ -380,6 +401,19 @@ async function advanceRun(
         nextRunAt: null,
         finishedAt: now,
       });
+      await announceEnded({
+        automation,
+        run,
+        now,
+        ending: {
+          kind: "finished",
+          nodeId: action.nodeId,
+          /* The author's own words for this ending, from the canvas. */
+          note:
+            flow.nodes.find((n) => n.id === action.nodeId)?.note?.trim() ||
+            null,
+        },
+      });
       outcome.exited += 1;
       return outcome;
 
@@ -391,6 +425,12 @@ async function advanceRun(
         error: action.reason,
       });
       console.error(`[automation ${automation.id}] ${action.reason}`);
+      await announceEnded({
+        automation,
+        run,
+        now,
+        ending: { kind: "broken", error: action.reason },
+      });
       return outcome;
 
     case "send": {
@@ -406,7 +446,11 @@ async function advanceRun(
         // a footer changed today should apply to tomorrow's step.
         const settings = await currentSettings();
         const links = await buildRecipientLinks({
-          campaignId: `auto:${automation.id}`,
+          /* Names this exact send, so opens and clicks are recorded on
+             it and a condition judging it sees them. Was
+             `auto:<automationId>` alone, which no tracking route
+             could resolve — every engagement was dropped. */
+          campaignId: automationTrackingId(automation.id, send.id),
           email: run.email,
           trackOpens: automation.trackOpens,
           trackClicks: automation.trackClicks,
@@ -460,6 +504,13 @@ async function advanceRun(
           nextRunAt: null,
           finishedAt: now,
         });
+        // The last step. Everything the sequence had, they received.
+        await announceEnded({
+          automation,
+          run,
+          now,
+          ending: { kind: "finished", nodeId: null, note: null },
+        });
         outcome.exited += 1;
       }
       return outcome;
@@ -483,9 +534,17 @@ async function advanceRun(
           surveyId: action.surveyId,
           email: run.email,
           name: run.name,
+          /* Signed into the link, so the answer can be noted on this
+             client's Salestrekker file. Without it a response names an
+             address and nothing else. */
+          dealId: dealIdForSource(run.sourceKind, run.sourceId),
         });
         const links = await buildRecipientLinks({
-          campaignId: `auto:${automation.id}`,
+          /* Names this exact send, so opens and clicks are recorded on
+             it and a condition judging it sees them. Was
+             `auto:<automationId>` alone, which no tracking route
+             could resolve — every engagement was dropped. */
+          campaignId: automationTrackingId(automation.id, send.id),
           email: run.email,
           /* Click-wrapping the survey link would put the response
              behind a redirect that counts a click and then forwards —
@@ -542,6 +601,13 @@ async function advanceRun(
           status: "done",
           nextRunAt: null,
           finishedAt: now,
+        });
+        // The last step. Everything the sequence had, they received.
+        await announceEnded({
+          automation,
+          run,
+          now,
+          ending: { kind: "finished", nodeId: null, note: null },
         });
         outcome.exited += 1;
       }

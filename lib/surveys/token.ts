@@ -36,6 +36,22 @@ export interface SurveyClaims {
   em: string;
   /** Display name, so the page can greet them without a lookup. */
   nm: string;
+  /**
+   * The Salestrekker deal this link was sent for, when the recipient
+   * came from the pipeline.
+   *
+   * Without it an answer names an address and nothing else, and the
+   * Salestrekker note for it has no file to go on — which is how survey
+   * notes shipped: announced, and never written. Carried inside the
+   * signed token rather than looked up by email afterwards, because a
+   * lookup by address can land on the wrong client's file (joint
+   * applicants, a second loan), and because being inside the signature
+   * means nobody can edit a link to write on a deal that isn't theirs.
+   *
+   * Optional: links issued before this existed still verify, and simply
+   * produce no note.
+   */
+  did?: string;
 }
 
 interface JwtSurveyClaims extends SurveyClaims, JWTPayload {}
@@ -74,7 +90,14 @@ export async function verifySurveyToken(
     if (!payload.sid || !payload.em) return { ok: false, reason: "invalid" };
     return {
       ok: true,
-      claims: { sid: payload.sid, em: payload.em, nm: payload.nm ?? "" },
+      claims: {
+        sid: payload.sid,
+        em: payload.em,
+        nm: payload.nm ?? "",
+        ...(typeof payload.did === "string" && payload.did
+          ? { did: payload.did }
+          : {}),
+      },
     };
   } catch (err) {
     /* jose verifies the signature before it checks expiry, so an
@@ -92,11 +115,14 @@ export async function surveyLink(args: {
   surveyId: string;
   email: string;
   name: string;
+  /** The deal this survey concerns, if the recipient has one. */
+  dealId?: string | null;
 }): Promise<string> {
   const token = await issueSurveyToken({
     sid: args.surveyId,
     em: args.email,
     nm: args.name,
+    ...(args.dealId ? { did: args.dealId } : {}),
   });
   return `${portalBaseUrl()}/s/${token}`;
 }

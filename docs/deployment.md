@@ -277,7 +277,9 @@ campaign event concerns somebody with an open deal:
 
 | Event | What lands on the file |
 |---|---|
-| `contact.clicked` | The campaign and the link they clicked |
+| `automation.entered` | The milestone that fired, in the canvas's words — "Started the *Annual review* sequence: a loan passes its 12-month settlement anniversary." |
+| `automation.completed` | Which ending, in the sequence author's own note — "Finished… Opened, nothing further. The broker picks it up from the pipeline instead." |
+| `contact.clicked` | The campaign or sequence, and the link they clicked |
 | `contact.unsubscribed` | That they opted out, and that loan correspondence is unaffected |
 | `contact.bounced` | The mail server's own diagnostic, and to confirm the address |
 | `survey.responded` | The NPS score and their comment |
@@ -285,11 +287,35 @@ campaign event concerns somebody with an open deal:
 Not `form.submitted`: a form with a Salestrekker destination already
 creates the deal through the same client, so a note would annotate a
 deal that exists because of it. Not `campaign.sent` or
-`campaign.failed`: those are about a send, not a person, so there is
-no file they belong on.
+`campaign.failed`: those are about a send, not a person. Not
+`automation.exited`: an unsubscribe is already noted, and a broken
+sequence is an operational fault rather than news about the client.
+Not `survey.detractor`: the score is already on the response's note.
 
-Only recipients whose contact came from a deal get a note. The settled
-back-book has no open deal to write on, and a note cannot invent one.
+Only contacts who came from a deal get a note — `sourceKind` of
+`deals`. The settled back-book has no open deal to write on, and a
+note cannot invent one. Survey answers find their deal through the
+link itself, which carries it inside the signature; links sent before
+that existed answer fine but produce no note.
+
+Notes are written after the response is sent (Next's `after`), so an
+unsubscribe confirmation or a click redirect never waits on
+Salestrekker's API.
+
+## Engagement in automation emails
+
+Automation emails' tracking links name the exact send
+(`auto:<automationId>:<sendId>`). Opens, clicks and unsubscribes are
+recorded on that send, which is what every "if they opened / clicked"
+step judges.
+
+Until this was fixed, the links carried `auto:<automationId>` and the
+tracking routes looked it up as a campaign recipient, found nothing,
+and dropped the engagement — so every engagement condition answered
+"no" once its window closed, and a client who had clicked still got
+the follow-up meant for people who had not. Links in any email sent
+before the fix still resolve, to the contact's most recent send in
+that sequence.
 
 A failure is logged and swallowed. Losing an unsubscribe because the
 CRM was down would be much the worse trade.
