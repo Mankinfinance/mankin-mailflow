@@ -50,11 +50,10 @@ export async function emitWebhook(
   data: Record<string, unknown>,
   occurredAt: Date = new Date(),
 ): Promise<void> {
-  /* Salestrekker is a subscriber with no URL.
-     It does not accept an envelope over HTTP, so it cannot be an
-     endpoint row; what it has is an API and a notes field. Handled
-     here rather than at each emit site so a new event gets it for
-     free.
+  /* Deal notes: a subscriber with no URL.
+     Campaign activity is written onto the client's deal in the shared
+     database, where LoanFlow's deal drawer shows it. Handled here
+     rather than at each emit site so a new event gets it for free.
 
      After the response, not before it. The first version awaited the
      note inline, which put Salestrekker's API between a customer and

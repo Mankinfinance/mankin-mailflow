@@ -1,27 +1,39 @@
 import "server-only";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { repos } from "@/lib/db/repos";
+import { formatTimestampAU } from "@/lib/format-date";
 import type { WebhookEvent } from "@/lib/webhooks/types";
 import { dealIdForSource } from "@/lib/campaigns/types";
 
 /**
- * Writing campaign activity back onto the client's file.
+ * Writing campaign activity back onto the client's deal.
  *
- * Salestrekker is not a generic webhook receiver — there is no URL to
- * POST an envelope at. What there is, and what Mailflow already holds,
- * is an API client with `addNote`. So the "webhook to Salestrekker" is
- * a note on the deal, which is also the thing a broker actually wants:
- * open the file, see that the client clicked "book a meeting" on
- * Tuesday, ring them.
+ * Where it lands matters, and the first version of this file got it
+ * wrong. It called the Salestrekker client's addNote and described the
+ * result as a note on the Salestrekker file. There is no live
+ * Salestrekker connection in this codebase: the "real" client throws
+ * "not yet implemented", and the one in use logs the note to the
+ * server console and keeps nothing. Every note was discarded.
  *
- * Deliberately not here: form.submitted. A form with a Salestrekker
- * destination already creates the deal through the same client, so
- * announcing it again would put a note on a deal that exists because
- * of the note's own subject.
+ * What does exist is the deals table both products share — the
+ * pipeline LoanFlow imports from Salestrekker — and deal_notes, which
+ * LoanFlow's deal drawer lists under "Notes". So the note is written
+ * there, stamped the way LoanFlow stamps its own ("who · when" on the
+ * first line, which the drawer shows as the header). addNote is still
+ * called afterwards, as LoanFlow does, so the day a real Salestrekker
+ * client exists the note reaches Salestrekker too without a change
+ * here.
+ *
+ * Deliberately not here: form.submitted. A form that creates a deal
+ * already puts the enquiry in the deal's own comments, so a note would
+ * say it twice.
  *
  * Every failure is swallowed and logged. A note is a courtesy; losing
- * an unsubscribe because a CRM was down would be a far worse trade.
+ * an unsubscribe because a note failed would be a far worse trade.
  */
+
+/** The name on the note's header line in LoanFlow's drawer. */
+export const NOTE_AUTHOR = "Mailflow";
 
 /** Events that earn a line on the file. The rest are noise there. */
 const NOTED: WebhookEvent[] = [
@@ -174,7 +186,24 @@ export async function noteOnSalestrekker(
     const dealId = await dealIdFor(data);
     if (!dealId) return { noted: false, reason: "no-deal" };
 
-    await getSalestrekkerClient().addNote(dealId, body);
+    const stamped = `${NOTE_AUTHOR} · ${formatTimestampAU(new Date())}\n${body}`;
+    await repos().dealNotes.add({
+      dealId,
+      body,
+      stampedBody: stamped,
+      templateId: null,
+      createdBy: "mailflow",
+    });
+
+    /* Mirrors LoanFlow's own note path. Today this reaches no
+       Salestrekker (see the file comment); it is here so that a real
+       client, when one is written, gets the note too. A failure costs
+       only that copy. */
+    try {
+      await getSalestrekkerClient().addNote(dealId, stamped);
+    } catch (err) {
+      console.error("[deal notes] Salestrekker copy failed", err);
+    }
     return { noted: true };
   } catch (err) {
     console.error(

@@ -37,7 +37,7 @@ export interface SurveyClaims {
   /** Display name, so the page can greet them without a lookup. */
   nm: string;
   /**
-   * The Salestrekker deal this link was sent for, when the recipient
+   * The pipeline deal this link was sent for, when the recipient
    * came from the pipeline.
    *
    * Without it an answer names an address and nothing else, and the

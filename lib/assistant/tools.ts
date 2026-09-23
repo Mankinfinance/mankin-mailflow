@@ -116,8 +116,12 @@ export const TOOLS = {
         scheduledJobsCanRun: present(process.env.CRON_SECRET),
         emailSendingIsSimulated: process.env.MOCK_OUTLOOK_SEND === "true",
         microsoftSendingCredentialsSet: graph,
-        salestrekkerApiKeySet: present(process.env.SALESTREKKER_API_KEY),
-        salestrekkerNotesOn: process.env.SALESTREKKER_NOTES !== "false",
+        /* There is no live Salestrekker connection: the pipeline is
+           the deals LoanFlow imports into the shared database, and
+           notes are saved onto those deals, where LoanFlow shows them.
+           Said as a fact so the assistant never implies otherwise. */
+        salestrekkerLiveConnection: false,
+        dealNotesOn: process.env.SALESTREKKER_NOTES !== "false",
         signInAddressPinned: present(process.env.AUTH_URL),
       };
     },

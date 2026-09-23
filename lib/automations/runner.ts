@@ -535,7 +535,7 @@ async function advanceRun(
           email: run.email,
           name: run.name,
           /* Signed into the link, so the answer can be noted on this
-             client's Salestrekker file. Without it a response names an
+             client's deal notes. Without it a response names an
              address and nothing else. */
           dealId: dealIdForSource(run.sourceKind, run.sourceId),
         });

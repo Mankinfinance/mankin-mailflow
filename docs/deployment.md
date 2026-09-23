@@ -268,15 +268,25 @@ ID** is not. Copy the Value before leaving the page.
 
 ## Crons
 
-Vercel rejects sub-daily cron schedules **at deploy time** on Hobby — it
-fails the build rather than quietly skipping runs. `vercel.json` is on
-daily schedules for that reason. Hourly sending needs Pro.
+The project is on Vercel Pro, so the schedules in `vercel.json` run at
+the cadence the code was written for:
 
-That cost is worst for `/api/cron/webhooks`, which drains queued
-webhook deliveries. On a daily schedule an unsubscribe can take a day
-to reach a receiver, which is slow for something another system is
-waiting on. It wants to run every few minutes, and is the strongest
-single argument for Pro.
+| Job | Every | Why that often |
+|---|---|---|
+| `/api/cron/campaigns` | 5 minutes | A scheduled send goes out when it was scheduled |
+| `/api/cron/webhooks` | 5 minutes | An unsubscribe reaches other systems within minutes |
+| `/api/cron/automations` | 15 minutes | Sequence steps are measured in days; transitions are not |
+| `/api/cron/bounces` | hour | Non-delivery reports take minutes to hours to arrive |
+
+**Every one of them refuses to run without `CRON_SECRET`.** The routes
+fail closed, because `/api/cron/` is outside the sign-in proxy and the
+secret is the only gate. Vercel sends it on its own invocations as
+`Authorization: Bearer <value>`. Without it nothing scheduled ever
+happens: no scheduled campaign, no sequence step, no bounce, no
+webhook — and nothing on screen says so except the Setup panel and the
+assistant's setup check.
+
+Hobby would reject these schedules at deploy time; they need Pro.
 
 ## When it does not work
 
@@ -287,45 +297,51 @@ single argument for Pro.
 - **500 or an application error** → an env var is missing; check Runtime Logs
 - **A warning that `middleware.ts` cannot be found** → a false positive. Next 16 renamed middleware to `proxy.ts`; ignore it.
 
-## Salestrekker
+## Salestrekker, LoanFlow and deal notes
 
-Two directions, and they work differently.
+There is **no live connection to Salestrekker** in this codebase. The
+"real" Salestrekker client throws "not yet implemented"; the one in use
+reads the deals table both products share — the pipeline LoanFlow
+imports from Salestrekker — and keeps any write it cannot store in
+memory. Setting `MOCK_SALESTREKKER=false` would select the unwritten
+client and break every page that lists deals, so leave it unset.
 
-**Out of Salestrekker into Mailflow**: the existing API client. Deals
-and settlements are read from it; `SALESTREKKER_API_KEY` is the only
-setting.
+What that means in practice:
 
-**Out of Mailflow into Salestrekker**: notes on the deal, not HTTP.
-Salestrekker has no inbound webhook URL to POST an envelope at, so the
-"webhook" is `addNote` through the same client, written when a
-campaign event concerns somebody with an open deal:
+- **The live pipeline** is LoanFlow's imported deals.
+- **Forms that create a deal** add it to that table, so it appears in
+  LoanFlow's pipeline. It does not appear in Salestrekker.
+- **Deal notes.** Campaign activity is written to `deal_notes`, which
+  LoanFlow's deal drawer lists under "Notes", headed "Mailflow · date":
 
-| Event | What lands on the file |
+| Event | The note |
 |---|---|
-| `automation.entered` | The milestone that fired, in the canvas's words — "Started the *Annual review* sequence: a loan passes its 12-month settlement anniversary." |
-| `automation.completed` | Which ending, in the sequence author's own note — "Finished… Opened, nothing further. The broker picks it up from the pipeline instead." |
-| `contact.clicked` | The campaign or sequence, and the link they clicked |
-| `contact.unsubscribed` | That they opted out, and that loan correspondence is unaffected |
-| `contact.bounced` | The mail server's own diagnostic, and to confirm the address |
+| `automation.entered` | The milestone that fired, in the canvas's words |
+| `automation.completed` | Which ending, in the sequence author's own note |
+| `contact.clicked` | The campaign or sequence, and the link |
+| `contact.unsubscribed` | That they opted out; loan correspondence unaffected |
+| `contact.bounced` | The mail server's own diagnostic; confirm the address |
 | `survey.responded` | The NPS score and their comment |
 
-Not `form.submitted`: a form with a Salestrekker destination already
-creates the deal through the same client, so a note would annotate a
-deal that exists because of it. Not `campaign.sent` or
-`campaign.failed`: those are about a send, not a person. Not
-`automation.exited`: an unsubscribe is already noted, and a broken
-sequence is an operational fault rather than news about the client.
-Not `survey.detractor`: the score is already on the response's note.
+The first version of this wrote only through the Salestrekker client's
+addNote, which logs to the console and stores nothing, while this doc
+said the notes reached Salestrekker. They reached nowhere. addNote is
+still called after the note is saved, as LoanFlow does, so a real
+client would receive them without a change here.
 
-Only contacts who came from a deal get a note — `sourceKind` of
-`deals`. The settled back-book has no open deal to write on, and a
-note cannot invent one. Survey answers find their deal through the
-link itself, which carries it inside the signature; links sent before
-that existed answer fine but produce no note.
+Only contacts from the pipeline get notes — `sourceKind` of `deals`.
+The settled back-book has no open deal. Survey answers find their deal
+through the link, which carries it inside the signature; links sent
+before that existed produce no note. Notes are written after the
+response is sent (Next's `after`), and `SALESTREKKER_NOTES=false`
+turns them off.
 
-Notes are written after the response is sent (Next's `after`), so an
-unsubscribe confirmation or a click redirect never waits on
-Salestrekker's API.
+**Demo deals.** When the imported-deals table is empty, the client
+used to fall back to sixteen invented deals — with real-looking
+addresses at gmail.com, outlook.com and so on. In production those
+would have joined the live-pipeline audience and been emailed. On a
+production deployment (`VERCEL_ENV=production`) the fallback is now
+empty; it still fills in locally and on previews.
 
 ## Engagement in automation emails
 

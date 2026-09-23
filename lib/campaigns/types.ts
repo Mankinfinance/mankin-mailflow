@@ -22,7 +22,7 @@ export const AudienceSourceSchema = z.enum(["settlements", "deals"]);
 export type AudienceSource = z.infer<typeof AudienceSourceSchema>;
 
 /**
- * The Salestrekker deal a contact belongs to, when they came from the
+ * The pipeline deal a contact belongs to, when they came from the
  * pipeline; null for the settled back-book, which has no open deal.
  *
  * One definition, compared against the schema's own enum member rather

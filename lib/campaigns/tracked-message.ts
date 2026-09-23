@@ -15,7 +15,7 @@ import { dealIdForSource } from "./types";
  *    answered "no" once its window closed, so a client who clicked
  *    "book a meeting" still got the "you didn't get back to us" email
  *  - automation reports showed 0% opens and clicks, forever
- *  - no automation click ever reached a webhook or a Salestrekker file
+ *  - no automation click ever reached a webhook or a deal note
  *
  * So there is one lookup, used by all four routes, and it knows both
  * shapes. New automation links name the exact send
@@ -81,7 +81,7 @@ export interface TrackedMessage {
   label: string | null;
   /** The recipient's display name, when known. */
   name: string | null;
-  /** The Salestrekker deal they came from, if they have one. */
+  /** The pipeline deal they came from, if they have one. */
   dealId: string | null;
   openedAt: Date | null;
   clickedAt: Date | null;

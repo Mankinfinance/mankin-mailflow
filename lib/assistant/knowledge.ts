@@ -14,11 +14,11 @@
 export const MAILFLOW_GUIDE = `
 # Mailflow — what it is
 
-Mailflow is Mankin Finance's email marketing platform, used by the brokers and support team. It sends as the broker's own Microsoft 365 mailbox (so replies go to the broker and sends appear in their Sent Items), reads contacts from two sources, and writes activity back to Salestrekker.
+Mailflow is Mankin Finance's email marketing platform, used by the brokers and support team. It sends as the broker's own Microsoft 365 mailbox (so replies go to the broker and sends appear in their Sent Items), reads contacts from two sources, and writes activity onto the client's deal in LoanFlow.
 
 Contacts come from:
 - The back-book: settled loans from the aggregator commission file (the "settlements" data shared with LoanFlow). Contacts arrive in monthly batches when the file is imported, so nothing new is expected between imports.
-- The live pipeline: deals in Salestrekker.
+- The live pipeline: the deals LoanFlow imports from Salestrekker into the shared database.
 
 Left navigation, top to bottom: Dashboard, Subscribers, Campaigns, Automations, Forms, Surveys, Landing pages, Templates, File manager, Webhooks, Settings. The gold "+ Create" button is top right.
 
@@ -65,7 +65,7 @@ Controls: "Turn on", "Pause", "Resume", "Delete". Each person enters a sequence 
 Automations run on a schedule every 15 minutes, so a delay or trigger can take up to 15 minutes to act.
 
 # Forms
-Forms → "Start with a template" or start from scratch. Set "Internal name", the fields ("What to ask for"), "Headline", "Supporting line", "Button", "Consent line", and "Where the enquiry lands": "Create a deal in the loan pipeline" (choose "Assign to" and "Starting stage") or "Record the enquiry only". "Publish" makes it live; "Take it down" unpublishes. "Put it on the website" gives the "Embed code" and a "Hosted link".
+Forms → "Start with a template" or start from scratch. Set "Internal name", the fields ("What to ask for"), "Headline", "Supporting line", "Button", "Consent line", and "Where the enquiry lands": "Create a deal in the loan pipeline" (choose "Assign to" and "Starting stage"; the deal appears in LoanFlow's pipeline) or "Record the enquiry only". "Publish" makes it live; "Take it down" unpublishes. "Put it on the website" gives the "Embed code" and a "Hosted link".
 
 # Landing pages
 Landing pages → a template or "Blank page". Blocks: Heading, Paragraph, a form (pick a live form — publish one in Forms first), testimonials. Set "Page title", "Search description" and "Web address", then "Publish". "View live page" opens it.
@@ -81,7 +81,9 @@ Webhooks tell other systems what happened. "Add an endpoint" → Name, URL (HTTP
 
 Events: contact.unsubscribed, contact.bounced, contact.clicked (first click per person per email), campaign.sent, campaign.failed (nothing delivered at all), survey.responded, survey.detractor (score 0–6), form.submitted (a lead), automation.entered (a trigger fired), automation.completed (reached an end the author designed), automation.exited (stopped by an unsubscribe or a sequence that could not run). There is deliberately no event per open.
 
-Salestrekker is not a webhook endpoint. Mailflow writes notes onto the client's deal instead, automatically, for: a milestone that started a sequence, a sequence finishing, a first click, an unsubscribe, a bounce, and a survey answer. Only contacts who came from a deal get notes; the settled back-book has no open deal to write on.
+Deal notes: Mailflow writes a note onto the client's deal automatically for a milestone that started a sequence, a sequence finishing, a first click, an unsubscribe, a bounce, and a survey answer. The notes appear in LoanFlow, in the deal drawer under "Notes", headed "Mailflow". Only contacts who came from the pipeline get notes; the settled back-book has no open deal to write on.
+
+The pipeline is the deals LoanFlow imports from Salestrekker into the database both products share. There is no live connection to Salestrekker itself: nothing Mailflow does is sent to Salestrekker, and deals created by forms appear in LoanFlow's pipeline, not in Salestrekker. Never tell anyone something will appear in Salestrekker.
 
 # Settings
 The panel at the very top, "Where the data lives", says whether anything is being kept. "Set up the tables" applies database updates; it is safe to press at any time and does nothing when there is nothing to do. Press it after any Mailflow update. "Details" opens /marketing/settings/database, which shows the build, whether the database is reachable, and which tables exist.

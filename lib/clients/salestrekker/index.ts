@@ -162,7 +162,16 @@ function clone<T>(x: T): T {
 function createMockClient(): SalestrekkerClient {
   // In-memory store keyed by id — mutated by updateStage/addNote so the
   // dashboard's optimistic flows feel real during local dev.
-  const store = new Map<string, Deal>(MOCK_DEALS.map((d) => [d.id, clone(d)]));
+  /* The demo deals are for local development and previews only. They
+     carry real-looking addresses at real domains (gmail.com,
+     outlook.com), and they stand in whenever the imported-deals table
+     is empty — so on a production deployment they would join the
+     "live pipeline" audience, and a campaign or a pipeline-stage
+     sequence would email them. Those addresses could belong to real
+     strangers. In production the store starts empty: no imports means
+     no pipeline, which is the truth. */
+  const demoDeals = process.env.VERCEL_ENV === "production" ? [] : MOCK_DEALS;
+  const store = new Map<string, Deal>(demoDeals.map((d) => [d.id, clone(d)]));
 
   /** Resolve a deal by id. Tries the single-row Postgres lookup first
    *  (SELECT WHERE id=$1) so portal page loads and server actions don't

@@ -128,10 +128,12 @@ describe("finding the file to write on", () => {
     });
 
     expect(result.noted).toBe(true);
-    expect(addNote).toHaveBeenCalledWith(
-      "deal-123",
-      'Clicked a link in "Rate review": https://tidycal.com/book',
-    );
+    // Saved where LoanFlow's deal drawer lists notes, with the header
+    // line the drawer shows above each one.
+    const [note] = await repos().dealNotes.listByDeal("deal-123");
+    expect(note.body).toBe('Clicked a link in "Rate review": https://tidycal.com/book');
+    expect(note.stampedBody).toMatch(/^Mailflow · .+\nClicked a link in "Rate review"/);
+    expect(note.createdBy).toBe("mailflow");
   });
 
   it("writes nothing for a contact from the settled back-book", async () => {
@@ -157,16 +159,32 @@ describe("finding the file to write on", () => {
     expect(addNote.mock.calls[0][0]).toBe("deal-explicit");
   });
 
-  it("swallows a CRM failure rather than losing the event", async () => {
+  it("keeps the note when the Salestrekker copy fails", async () => {
+    // The copy to Salestrekker is secondary; the saved note is what a
+    // broker reads.
+    addNote.mockRejectedValue(new Error("Salestrekker 503"));
+
+    const result = await noteOnSalestrekker("contact.unsubscribed", {
+      dealId: "deal-copy-fails",
+    });
+
+    expect(result).toEqual({ noted: true });
+    expect(await repos().dealNotes.listByDeal("deal-copy-fails")).toHaveLength(1);
+  });
+
+  it("swallows a failure to save rather than losing the event", async () => {
     // The unsubscribe has already happened. Throwing here would roll
     // back something that genuinely occurred.
-    addNote.mockRejectedValue(new Error("Salestrekker 503"));
+    const save = vi
+      .spyOn(repos().dealNotes, "add")
+      .mockRejectedValue(new Error("database unavailable"));
 
     const result = await noteOnSalestrekker("contact.unsubscribed", {
       dealId: "deal-123",
     });
 
     expect(result).toEqual({ noted: false, reason: "failed" });
+    save.mockRestore();
   });
 
   it("ignores an event it does not note", async () => {
@@ -289,8 +307,8 @@ describe("automation notes", () => {
       dealId: "D-12",
     });
     expect(result.noted).toBe(true);
-    expect(addNote).toHaveBeenCalledWith(
-      "D-12",
+    const [note] = await repos().dealNotes.listByDeal("D-12");
+    expect(note.body).toBe(
       'Started the "Pre-approval going cold" sequence: a deal has been at Pre-Approval for 60 days.',
     );
   });
