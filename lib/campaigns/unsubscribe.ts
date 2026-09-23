@@ -3,6 +3,7 @@ import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
 import { emitWebhook } from "@/lib/webhooks/dispatch";
 import {
+  campaignIdOf,
   findTrackedMessage,
   messageFields,
   parseTrackingId,
@@ -32,10 +33,14 @@ export async function recordUnsubscribe(args: {
 }): Promise<void> {
   const em = args.email.toLowerCase();
 
+  /* Attribution only when it is a campaign. An automation's tracking
+     id is not a uuid, and passing it here made this — the one write
+     the law requires — throw in Postgres. Which automation email
+     prompted the opt-out is still recorded, on the send, below. */
   await repos().campaign.suppress({
     email: em,
     reason: "unsubscribe",
-    campaignId: args.cid,
+    campaignId: campaignIdOf(parseTrackingId(args.cid)),
     addedBy: "customer",
   });
 

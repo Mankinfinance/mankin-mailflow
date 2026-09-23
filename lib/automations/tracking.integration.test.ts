@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 
 /**
  * Engagement with automation emails, end to end through the real
@@ -369,5 +369,110 @@ describe("lifecycle events", () => {
     expect(exited).toHaveLength(1);
     expect(exited[0].data).toMatchObject({ reason: "unsubscribed" });
     expect(emitted.some((e) => e.event === "automation.completed")).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* uuid columns                                                               */
+/* -------------------------------------------------------------------------- */
+
+describe("writes into uuid columns", () => {
+  /* email_suppressions.campaign_id and campaign_link_clicks.campaign_id
+     are uuids in Postgres. An automation's tracking id is not, and
+     Postgres rejects it (22P02). The in-memory repo accepts any string,
+     so these spy on the two writes: anything reaching them must be a
+     real campaign id or nothing. */
+  const UUID_OR_MOCK_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|camp-\d+)$/;
+
+  /* Restored here rather than at the end of each test, so a failing
+     assertion cannot leave a spy behind to fail the next test too. */
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("an automation unsubscribe never attributes to a non-campaign id", async () => {
+    // The bug: this write threw in Postgres, so the opt-out the law
+    // requires never landed, while the one-click route told Gmail it had.
+    const suppress = vi.spyOn(repos().campaign, "suppress");
+    await liveAnnualReview();
+    await tickAutomations(NOW);
+    const oneClick = (sendMock.mock.calls[0][0] as { unsubscribeUrl: string })
+      .unsubscribeUrl;
+
+    await oneClickRoute.POST(
+      new Request(oneClick, { method: "POST" }),
+      params(oneClick.split("/api/e/u/")[1]),
+    );
+
+    expect(suppress).toHaveBeenCalledTimes(1);
+    expect(suppress.mock.calls[0][0].campaignId).toBeNull();
+  });
+
+  it("an automation click never counts a link against a non-campaign id", async () => {
+    const count = vi.spyOn(repos().campaign, "recordLinkClick");
+    await liveAnnualReview();
+    await tickAutomations(NOW);
+
+    await click(await cidOfSend(0));
+
+    for (const [id] of count.mock.calls) {
+      expect(id).toMatch(UUID_OR_MOCK_ID);
+    }
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it("a campaign click still counts its link, and a failing count costs only that", async () => {
+    // Simulates Postgres refusing the link-count insert. It used to run
+    // first, and its throw skipped recording the click entirely.
+    const campaign = await repos().campaign.create({
+      name: "Rate review",
+      subject: "Worth a look",
+      body: "Hi",
+      status: "sent",
+      audience: {},
+      fromBrokerId: "mm",
+      createdBy: "mm",
+    });
+    await repos().campaign.setRecipients(campaign.id, [
+      {
+        campaignId: campaign.id,
+        email: "sarah@example.com",
+        name: "Sarah Chen",
+        firstName: "Sarah",
+        sourceKind: "settlements",
+        sourceId: "L-1",
+      },
+    ]);
+    const count = vi
+      .spyOn(repos().campaign, "recordLinkClick")
+      .mockRejectedValue(Object.assign(new Error("invalid input syntax for type uuid"), { code: "22P02" }));
+
+    await click(campaign.id);
+
+    expect(count).toHaveBeenCalledWith(campaign.id, "https://tidycal.com/book");
+    const recipient = await repos().campaign.findRecipient(campaign.id, "sarah@example.com");
+    expect(recipient!.clickedAt).toBeInstanceOf(Date);
+    expect(emitted.some((e) => e.event === "contact.clicked")).toBe(true);
+    expect(redirected).toEqual(["https://tidycal.com/book"]);
+    await repos().campaign.remove(campaign.id);
+  });
+
+  it("a campaign unsubscribe keeps its campaign attribution", async () => {
+    const campaign = await repos().campaign.create({
+      name: "Rate review",
+      subject: "Worth a look",
+      body: "Hi",
+      status: "sent",
+      audience: {},
+      fromBrokerId: "mm",
+      createdBy: "mm",
+    });
+    const suppress = vi.spyOn(repos().campaign, "suppress");
+    const { recordUnsubscribe } = await import("@/lib/campaigns/unsubscribe");
+
+    await recordUnsubscribe({ cid: campaign.id, email: "sarah@example.com", via: "link" });
+
+    expect(suppress.mock.calls[0][0].campaignId).toBe(campaign.id);
+    await repos().campaign.remove(campaign.id);
   });
 });

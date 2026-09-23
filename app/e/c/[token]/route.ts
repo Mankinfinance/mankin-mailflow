@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { repos } from "@/lib/db/repos";
 import { emitWebhook } from "@/lib/webhooks/dispatch";
 import {
+  campaignIdOf,
   findTrackedMessage,
-  linkClickKey,
   messageFields,
   parseTrackingId,
 } from "@/lib/campaigns/tracked-message";
@@ -53,13 +53,6 @@ export async function GET(
 
     if (verified.ok) {
       const { cid, em } = verified.claims;
-      const subject = parseTrackingId(cid);
-      // Which link, not just that there was one — the report's link
-      // table is the difference between "17% clicked" and "17% clicked
-      // the booking link".
-      if (target) {
-        await repos().campaign.recordLinkClick(linkClickKey(subject), target);
-      }
 
       /* Campaign or automation. This used to look for a campaign
          recipient only, so a click in an automation email recorded
@@ -91,6 +84,23 @@ export async function GET(
             url: target,
             clickedAt: now.toISOString(),
           });
+        }
+      }
+
+      /* Which link, not just that there was one — the report's link
+         table is the difference between "17% clicked" and "17% clicked
+         the booking link". Campaigns only: the table's campaign_id is
+         a uuid, and an automation's tracking id is not. This used to
+         run first, so in Postgres an automation click threw here and
+         nothing below it — the click, the open, the webhook — was ever
+         recorded. Last now, and on its own, so a failure costs only
+         the link count. */
+      const campaignId = campaignIdOf(parseTrackingId(cid));
+      if (target && campaignId) {
+        try {
+          await repos().campaign.recordLinkClick(campaignId, target);
+        } catch (err) {
+          console.error("[campaign click] link count failed", err);
         }
       }
     }

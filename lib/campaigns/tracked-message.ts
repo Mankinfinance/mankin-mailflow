@@ -51,14 +51,22 @@ export function parseTrackingId(cid: string): TrackingSubject {
 }
 
 /**
- * Where a link click is counted. Stable per sender rather than per
- * send, so a future automation click map can group on it; campaign
- * reports read these by campaign id and are unaffected.
+ * The campaign a tracking id belongs to, or null for anything else.
+ *
+ * Several columns that record which campaign prompted something —
+ * email_suppressions.campaign_id, campaign_link_clicks.campaign_id —
+ * are uuids. An automation's tracking id (`auto:…`) is not, and
+ * Postgres rejects it outright (22P02). Written straight into the
+ * suppression register, that made every unsubscribe from an
+ * automation email fail in production: the insert threw, the person
+ * stayed on the list, and the one-click route — which must answer 200
+ * — told Gmail it had worked. The in-memory repo accepts any string,
+ * so no test saw it.
+ *
+ * So anything that writes a campaign attribution goes through here.
  */
-export function linkClickKey(subject: TrackingSubject): string {
-  return subject.kind === "campaign"
-    ? subject.campaignId
-    : `${AUTOMATION_PREFIX}${subject.automationId}`;
+export function campaignIdOf(subject: TrackingSubject): string | null {
+  return subject.kind === "campaign" ? subject.campaignId : null;
 }
 
 export interface Engagement {
