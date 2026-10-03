@@ -7,6 +7,11 @@ import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
 import { MailflowSettingsSchema, SignatureSchema } from "@/lib/mailflow/settings";
 import { currentSettings } from "@/lib/mailflow/current-settings";
+import {
+  liveConnectionDeps,
+  runConnectionTests,
+  type ConnectionResult,
+} from "@/lib/setup/connection-tests";
 
 /**
  * Saving the module's settings.
@@ -135,4 +140,20 @@ function describePath(path: PropertyKey[]): string {
     disclaimer: "Confidentiality note",
   };
   return names[head] ?? head;
+}
+
+/**
+ * Calls every outside service for real and reports what each said.
+ * Admin-only: the answers describe how the firm's Microsoft 365 and
+ * Anthropic accounts are set up, though never a secret.
+ */
+export async function testConnectionsAction(): Promise<
+  { ok: true; results: ConnectionResult[]; ranAt: string } | { ok: false; error: string }
+> {
+  const broker = await currentBroker();
+  if (!(await canAccessAdmin(broker.id))) {
+    return { ok: false, error: "Admin access required to test connections." };
+  }
+  const results = await runConnectionTests(liveConnectionDeps());
+  return { ok: true, results, ranAt: new Date().toISOString() };
 }

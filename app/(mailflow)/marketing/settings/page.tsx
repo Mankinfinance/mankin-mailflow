@@ -5,6 +5,7 @@ import { SettingsForm } from "@/components/mailflow/SettingsForm";
 import { SignatureForm } from "@/components/mailflow/SignatureForm";
 import { DatabasePanel } from "@/components/mailflow/DatabasePanel";
 import { SenderAuthCard } from "@/components/mailflow/SenderAuthCard";
+import { ConnectionTests } from "@/components/mailflow/ConnectionTests";
 import { checkSenderAuth } from "@/lib/campaigns/sender-auth";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
@@ -82,6 +83,7 @@ export default async function MailflowSettingsPage() {
             }
           />
 
+          <ConnectionTests />
           <SenderAuthCard auth={senderAuth} />
 
           <SettingsForm

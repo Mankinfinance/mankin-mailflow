@@ -88,6 +88,8 @@ The pipeline is the deals LoanFlow imports from Salestrekker into the database b
 # Settings
 The panel at the very top, "Where the data lives", says whether anything is being kept. "Set up the tables" applies database updates; it is safe to press at any time and does nothing when there is nothing to do. Press it after any Mailflow update. "Details" opens /marketing/settings/database, which shows the build, whether the database is reachable, and which tables exist.
 
+Next, "Connections": the "Test connections" button calls the database, Microsoft 365 (sign-in, Mail.Send and Mail.Read consent, and each broker's mailbox), Anthropic, the address in email links and the sending domain for real, and lists what is working and the fix for anything not. It sends no email. Your setup_status tool only sees whether variables are present, so when someone needs to know whether a key or secret actually works, send them to this button. Then the "Sending domain" card (SPF, DKIM, DMARC, link domain).
+
 Below that: "Postal address" and "Unsubscribe mailbox" (both printed on every campaign), "Send pace", and default "Track opens" / "Track clicks". "Save settings".
 
 # Opt-outs and compliance
