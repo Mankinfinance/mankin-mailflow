@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+// The connection tests reach outside services; they have their own tests.
+vi.mock("@/lib/setup/connection-tests", () => ({
+  runConnectionTests: vi.fn(async () => []),
+  liveConnectionDeps: vi.fn(() => ({})),
+}));
+
 vi.mock("@/lib/auth/current-broker", () => ({
   currentBroker: async () => ({ id: "mm", name: "Michael Mankin" }),
 }));
