@@ -73,12 +73,14 @@ finance email.
 
 1. Vercel → mankin-mailflow → Settings → Domains → Add, for example
    `mail.mankinfinance.com`.
-2. Add the CNAME Vercel shows (`cname.vercel-dns.com`) at the DNS host.
+2. Add the CNAME Vercel shows at the DNS host (Netlify DNS for both
+   mankinfinance.com and mankinfinance.com.au). Vercel gives each
+   project its own target, such as `<id>.vercel-dns-016.com`.
 3. Once Vercel shows it valid, change `NEXT_PUBLIC_APP_URL` to
    `https://mail.mankinfinance.com` and redeploy.
-4. If sign-in is pinned with `AUTH_URL`, change it to match, and add the
-   new callback URL (`https://mail.mankinfinance.com/api/auth/callback/microsoft-entra-id`)
-   to the Entra app registration.
+4. Leave `AUTH_URL` alone. Staff keep signing in at the vercel.app
+   address; only the links in emails move. Changing it as well would
+   also mean adding a new redirect URI to the Entra sign-in app.
 
 Keep the old vercel.app address working: emails already sent link to it.
 
