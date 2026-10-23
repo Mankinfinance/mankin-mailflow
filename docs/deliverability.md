@@ -12,18 +12,26 @@ message itself: `List-Unsubscribe` with RFC 8058 one-click, a real
 plain-text part, a domain-correct `Message-ID`, `Precedence: bulk`, the
 postal address and the licence lines. What it cannot do is the DNS.
 
-## Where mankinfinance.com stood on 23 September 2026
+## Where things stand (23 October 2026)
 
 | Check | Status | Record |
 | --- | --- | --- |
 | SPF | Passing | `v=spf1 include:_spf.mlsend.com include:spf.protection.outlook.com -all` |
-| DKIM (Microsoft 365) | **Missing** | no `selector1._domainkey` or `selector2._domainkey` |
+| DKIM (Microsoft 365) | **Enabled, Valid** | `selector1._domainkey` and `selector2._domainkey` → `…MankinFinance.k-v1.dkim.mail.microsoft` |
 | DKIM (MailerLite) | Present | `litesrv._domainkey` → `litesrv._domainkey.mlsend.com` |
 | DMARC | Monitoring only | `v=DMARC1; p=none; rua=mailto:michael@mankinfinance.com` |
-| Link domain | Shared | links and images point at `*.vercel.app` |
+| Link domain | Own domain | `mail.mankinfinance.com` CNAME to Vercel; `NEXT_PUBLIC_APP_URL=https://mail.mankinfinance.com` |
 
 `mankinfinance.com.au` has SPF (`include:spf.protection.outlook.com -all`)
-and no DMARC record.
+and `v=DMARC1; p=reject;`. Nothing sends as it: the Microsoft 365
+accepted domain is `www.mankinfinance.com.au`, whose DKIM is left off.
+
+DNS for both domains is in Netlify (Domains → the domain → DNS records).
+Steps 1 and 3 below are done; they stay here for rebuilding the setup.
+The next action is step 4, around mid-November 2026.
+
+On 23 September the Microsoft 365 DKIM records were missing and links
+pointed at `*.vercel.app`; the DMARC record was as above.
 
 ## 1. Switch on DKIM in Microsoft 365 (the important one)
 
