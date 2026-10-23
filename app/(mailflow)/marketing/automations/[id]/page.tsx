@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import { MailflowContent, PageTitle } from "@/components/mailflow/MailflowPage";
-import { AutomationCanvas } from "@/components/mailflow/AutomationCanvas";
+import { AutomationEditor } from "@/components/mailflow/AutomationEditor";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { AutomationControls } from "@/components/mailflow/AutomationControls";
 import { TriggerTargetPicker } from "@/components/mailflow/TriggerTargetPicker";
 import { currentBroker } from "@/lib/auth/current-broker";
@@ -26,9 +27,10 @@ export default async function AutomationPage({
   if (!automation) notFound();
 
   const parsed = AutomationFlowSchema.safeParse(automation.flow);
-  const [stats, runs] = await Promise.all([
+  const [stats, runs, settings] = await Promise.all([
     repos().automation.nodeStats(automation.id),
     repos().automation.listRuns(automation.id, { limit: 5000 }),
+    currentSettings(),
   ]);
 
   /* A signup trigger stores the form's id; the card has to name it.
@@ -157,21 +159,26 @@ export default async function AutomationPage({
           )}
 
           {parsed.success ? (
-            <AutomationCanvas
-              flow={parsed.data}
-              stats={stats}
-              waitingByNode={waitingByNode}
-              entered={runs.length}
-              enteredThisMonth={enteredThisMonth}
-              stageLabel={
-                parsed.data.trigger.kind === "pipeline-stage"
-                  ? stageLabels[parsed.data.trigger.stageId]
-                  : undefined
-              }
-              formName={triggerForm?.name}
-              brokerNames={Object.fromEntries(
-                TEAM.map((m) => [m.id, m.short]),
-              )}
+            <AutomationEditor
+              automationId={automation.id}
+              live={automation.status === "live"}
+              fromBrokerId={automation.fromBrokerId}
+              fromName={teamMember(automation.fromBrokerId).name}
+              signature={settings.signature}
+              postalAddress={settings.postalAddress}
+              canvas={{
+                flow: parsed.data,
+                stats,
+                waitingByNode,
+                entered: runs.length,
+                enteredThisMonth,
+                stageLabel:
+                  parsed.data.trigger.kind === "pipeline-stage"
+                    ? stageLabels[parsed.data.trigger.stageId]
+                    : undefined,
+                formName: triggerForm?.name,
+                brokerNames: Object.fromEntries(TEAM.map((m) => [m.id, m.short])),
+              }}
             />
           ) : (
             <p className="text-[12.5px] text-danger">

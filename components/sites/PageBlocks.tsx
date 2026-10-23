@@ -155,6 +155,11 @@ function BlockView({
               compact
               pageId={pageId}
             />
+          ) : !pageId ? (
+            /* In the editor: say what to do, not what a visitor would see. */
+            <p className="rounded-md border border-dashed border-hairline px-3 py-4 text-center text-[12.5px] text-ink-mute">
+              Choose a form in this block and it appears here.
+            </p>
           ) : (
             /* Publishing is blocked on this, so a visitor should never
                reach it — but a form deleted after publishing would, and

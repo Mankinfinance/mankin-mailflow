@@ -28,11 +28,14 @@ export function SurveyForm({
   token,
   config,
   alreadyAnswered,
+  preview = false,
 }: {
   token: string;
   config: SurveyConfig;
   /** Their previous answers, when they have already responded. */
   alreadyAnswered: Record<string, number | string> | null;
+  /** In the admin screen: answers can be tried, nothing is recorded. */
+  preview?: boolean;
 }) {
   const [answers, setAnswers] = React.useState<Record<string, number | string>>(
     alreadyAnswered ?? {},
@@ -53,6 +56,10 @@ export function SurveyForm({
 
   function submit() {
     setError(null);
+    if (preview) {
+      setDone(true);
+      return;
+    }
     startTransition(async () => {
       const result = await submitSurveyAction(token, answers);
       if (result.ok) setDone(true);
@@ -192,7 +199,10 @@ function NpsScale({
   );
   return (
     <div>
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+      {/* All eleven always visible: one row where there is room, 0–5 and
+          6–10 on a phone. A sideways scroll hid 9 and 10, the scores
+          that matter most. */}
+      <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-11">
         {scores.map((n) => {
           const picked = value === n;
           return (
@@ -202,7 +212,7 @@ function NpsScale({
               onClick={() => onChange(n)}
               aria-label={`${n} out of 10`}
               aria-pressed={picked}
-              className="h-11 min-w-[38px] shrink-0 rounded-md border text-[14px] font-semibold tabular-nums transition-colors"
+              className="h-11 min-w-0 rounded-md border text-[14px] font-semibold tabular-nums transition-colors"
               style={{
                 backgroundColor: picked ? "#161461" : "var(--color-surface)",
                 color: picked ? "#ffffff" : "var(--color-ink-soft)",

@@ -35,6 +35,8 @@ export function previewFields(brokerId: string): Record<string, string> {
     broker_phone: broker.phone,
     broker_email: broker.email,
     booking_url: broker.bookingUrl ?? "",
+    // Only survey invitations use it; each real one is signed per person.
+    survey_link: "#survey",
   };
 }
 

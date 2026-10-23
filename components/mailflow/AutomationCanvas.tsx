@@ -1,3 +1,6 @@
+"use client";
+
+import * as React from "react";
 import {
   Clock,
   GitBranch,
@@ -11,6 +14,13 @@ import type { AutomationFlow, AutomationNode } from "@/lib/automations/types";
 import { describeTrigger } from "@/lib/automations/triggers";
 import { describeCondition } from "@/lib/automations/engine";
 import type { AutomationNodeStats } from "@/lib/db/repos";
+import { editableFields } from "@/lib/automations/edit";
+
+/** Set by the editor so a card can be picked; absent, the canvas is read-only. */
+export const CanvasSelection = React.createContext<{
+  selectedId: string | null;
+  onSelect: (nodeId: string) => void;
+} | null>(null);
 
 /**
  * The sequence, drawn.
@@ -83,16 +93,27 @@ export function AutomationCanvas({
     return out;
   };
 
+  /* On a phone the canvas is wider than the screen; start it centred on
+     the trunk rather than at the left edge, where there is nothing. */
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (el && el.scrollWidth > el.clientWidth) {
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    }
+  }, []);
+
   return (
     <div
-      className="rounded-[10px] border border-hairline px-6 py-7"
+      ref={scrollRef}
+      className="overflow-x-auto rounded-[10px] border border-hairline px-4 py-7 sm:px-6"
       style={{
         backgroundColor: "#fdfcf8",
         backgroundImage: "radial-gradient(#e6e2d6 1px, transparent 1px)",
         backgroundSize: "18px 18px",
       }}
     >
-      <div className="mx-auto flex w-full max-w-[680px] flex-col items-center">
+      <div className="mx-auto flex w-full min-w-[680px] max-w-[680px] flex-col items-center">
         <TriggerCard
           label={describeTrigger(flow.trigger, stageLabel, formName)}
           entered={entered}
@@ -228,11 +249,40 @@ function NodeCard({
   waiting: number;
   brokerNames?: Record<string, string>;
 }) {
+  const selection = React.useContext(CanvasSelection);
+  const selectable = Boolean(selection) && editableFields(node).length > 0;
+  const selected = selection?.selectedId === node.id;
+  const pick = selectable
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        "aria-pressed": selected,
+        "aria-label": `Edit step: ${titleFor(node, brokerNames)}`,
+        onClick: () => selection!.onSelect(node.id),
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selection!.onSelect(node.id);
+          }
+        },
+      }
+    : {};
+  const pickClass = selectable
+    ? " cursor-pointer transition-shadow hover:ring-2 hover:ring-brand/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+    : "";
+  const selectedClass = selected ? " ring-2 ring-brand" : "";
+
   if (node.kind === "exit") {
     return (
       <div
-        className="flex w-[180px] items-center justify-center gap-1.5 rounded-full border border-dashed px-3 py-1.5"
+        {...pick}
+        className={
+          "flex w-[180px] items-center justify-center gap-1.5 rounded-full border border-dashed px-3 py-1.5" +
+          pickClass +
+          selectedClass
+        }
         style={{ backgroundColor: "#f6f6f3", borderColor: "var(--color-hairline)" }}
+        title={node.note || undefined}
       >
         <LogOut size={12} strokeWidth={1.5} className="text-ink-mute" />
         <span className="text-[11.5px] font-semibold text-ink-mute">Exit</span>
@@ -254,7 +304,8 @@ function NodeCard({
 
   return (
     <div
-      className="w-[330px] overflow-hidden rounded-[10px] border bg-surface"
+      {...pick}
+      className={"w-[330px] overflow-hidden rounded-[10px] border bg-surface" + pickClass + selectedClass}
       style={{ borderColor: style.border, boxShadow: "var(--shadow-card)" }}
     >
       <div

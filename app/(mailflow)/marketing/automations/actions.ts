@@ -11,6 +11,7 @@ import {
   emptyFlow,
 } from "@/lib/automations/types";
 import { validateFlow } from "@/lib/automations/engine";
+import { applyStepEdit, type StepPatch } from "@/lib/automations/edit";
 
 /**
  * Server actions for the automations surface. Admin-gated like the rest
@@ -211,6 +212,42 @@ export async function setTriggerTargetAction(
     actor: { type: "broker", id: auth.brokerId },
     action: "automation.set-trigger",
     meta: { automationId: id, kind: trigger.kind, target: chosen },
+  });
+  revalidatePath(`/marketing/automations/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Change what one step says or how long it waits.
+ *
+ * Allowed while the sequence is live, unlike the trigger: the shape of
+ * the sequence stays as it was, so nobody partway along is stranded.
+ * A changed wait applies to whoever is already waiting at that step,
+ * because the engine reads it each time it checks.
+ */
+export async function updateAutomationStepAction(
+  id: string,
+  nodeId: string,
+  patch: StepPatch,
+): Promise<Result> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const automation = await repos().automation.get(id);
+  if (!automation) return { ok: false, error: "Sequence not found." };
+  const parsed = AutomationFlowSchema.safeParse(automation.flow);
+  if (!parsed.success) return { ok: false, error: "This sequence could not be read." };
+
+  const edited = applyStepEdit(parsed.data, nodeId, patch);
+  if (!edited.ok) return edited;
+  const checked = AutomationFlowSchema.safeParse(edited.flow);
+  if (!checked.success) return { ok: false, error: "That change would break the sequence." };
+
+  await repos().automation.update(id, { flow: checked.data });
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "automation.edit-step",
+    meta: { automationId: id, nodeId, fields: Object.keys(patch) },
   });
   revalidatePath(`/marketing/automations/${id}`);
   return { ok: true };

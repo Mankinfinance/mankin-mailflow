@@ -56,6 +56,8 @@ Sequences send on their own when something happens. Automations → start from a
 
 Templates: 12-month settlement anniversary · Pre-approval going cold at 60 days · Three months after settlement · Two years since settlement · Two weeks at lodged with no news · Welcome, just after settlement · Refinanced away, six months on · Welcome a new enquiry · Follow up a tagged contact · A quarter of the loan paid off · Ask how it went.
 
+Editing a sequence: click any step on the canvas to open its panel. An email or survey step's name, subject and body can be changed (Write / Preview shows the email with the real signature), a Wait step's days, an engagement condition's "Give them up to" days, a split's share and an exit's note; then "Save step". This works while the sequence is on: changes apply from the next time anyone reaches the step, and a changed wait applies to people already waiting there. Adding, removing or rewiring steps is not possible from the canvas.
+
 Triggers (what enrols someone): a settlement anniversary (N months after settlement), a pipeline stage (deal sitting at a stage for N days), a form submission, a tag being added, an equity milestone (a share of the original loan paid down).
 
 Steps on the canvas: Send, Delay, Condition ("Opened the email?" / "Clicked the link?" within N days, or a question about the contact: tagged, lender, balance, loan age, broker), Split (A/B share of contacts), Survey, Exit. Each exit step has a note explaining why the sequence ends there.

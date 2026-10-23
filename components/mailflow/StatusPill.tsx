@@ -22,6 +22,11 @@ const TONE: Record<
   failed: { bg: "#fbf0ef", ink: "#a3423e", line: "#eccfcd" },
   bounced: { bg: "#fbf0ef", ink: "#a3423e", line: "#eccfcd" },
   suppressed: { bg: "#f4f4f1", ink: "#5f636e", line: "#e2e0d8" },
+  /* Sequences, forms, surveys and pages: running reads green with a
+     dot like sending does, because something is happening on its own. */
+  live: { bg: "#eef5f0", ink: "#2f6f4a", line: "#cbe0d4", dot: "#2f6f4a" },
+  published: { bg: "#eef5f0", ink: "#2f6f4a", line: "#cbe0d4", dot: "#2f6f4a" },
+  closed: { bg: "#f4f4f1", ink: "#8a8d95", line: "#e2e0d8" },
 };
 
 export function StatusPill({

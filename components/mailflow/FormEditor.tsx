@@ -71,6 +71,88 @@ export function FormEditor({ form, brokers, stages, appUrl }: FormEditorProps) {
 
   const hostedUrl = `${appUrl}/f/${form.id}`;
 
+  const actionButtons = (
+    <>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            setStatus(null);
+            if (await save()) setStatus({ tone: "ok", text: "Saved." });
+          })
+        }
+        className="mf-quiet h-[34px] rounded-md border border-hairline bg-surface text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-paper-warm disabled:opacity-50"
+      >
+        Save
+      </button>
+
+      {form.status === "live" ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              await pauseFormAction(form.id);
+              router.refresh();
+            })
+          }
+          className="mf-quiet h-[34px] rounded-md border border-hairline bg-surface text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-paper-warm disabled:opacity-50"
+        >
+          Take it down
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              setStatus(null);
+              if (!(await save())) return;
+              const result = await publishFormAction(form.id);
+              if (result.ok) router.refresh();
+              else setStatus({ tone: "error", text: result.error });
+            })
+          }
+          className="mf-quiet h-[34px] rounded-md text-[12.5px] font-bold transition-colors disabled:opacity-50"
+          style={{ backgroundColor: "#e3ad4b", color: "#2c1d02" }}
+        >
+          Publish
+        </button>
+      )}
+
+      {form.status !== "live" && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm("Delete this form and its enquiries?")) return;
+            startTransition(async () => {
+              const result = await deleteFormAction(form.id);
+              if (result.ok) router.push("/marketing/forms");
+              else setStatus({ tone: "error", text: result.error });
+            });
+          }}
+          className="mf-quiet h-[34px] rounded-md border border-hairline text-[12.5px] font-semibold transition-colors hover:bg-paper-warm disabled:opacity-50"
+          style={{ color: "#8a4b48" }}
+        >
+          Delete
+        </button>
+      )}
+    </>
+  );
+  const statusLine = (
+    status && (
+      <p
+        className={`mt-2 text-[11.5px] font-semibold ${
+          status.tone === "ok" ? "text-ok" : "text-danger"
+        }`}
+      >
+        {status.text}
+      </p>
+    )
+  );
+
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-3.5">
@@ -271,6 +353,12 @@ export function FormEditor({ form, brokers, stages, appUrl }: FormEditorProps) {
             />
           </div>
         </Card>
+        {/* On a phone the controls column comes after everything, so the
+            same buttons ride along at the bottom of the fields instead. */}
+        <Card className="sticky bottom-3 z-20 lg:hidden">
+          <div className="flex gap-2 [&>*]:flex-1">{actionButtons}</div>
+          {statusLine}
+        </Card>
       </div>
 
       {/* Live preview + publish controls */}
@@ -292,84 +380,9 @@ export function FormEditor({ form, brokers, stages, appUrl }: FormEditorProps) {
           </p>
         </Card>
 
-        <Card>
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  setStatus(null);
-                  if (await save()) setStatus({ tone: "ok", text: "Saved." });
-                })
-              }
-              className="mf-quiet h-[34px] rounded-md border border-hairline bg-surface text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-paper-warm disabled:opacity-50"
-            >
-              Save
-            </button>
-
-            {form.status === "live" ? (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    await pauseFormAction(form.id);
-                    router.refresh();
-                  })
-                }
-                className="mf-quiet h-[34px] rounded-md border border-hairline bg-surface text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-paper-warm disabled:opacity-50"
-              >
-                Take it down
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    setStatus(null);
-                    if (!(await save())) return;
-                    const result = await publishFormAction(form.id);
-                    if (result.ok) router.refresh();
-                    else setStatus({ tone: "error", text: result.error });
-                  })
-                }
-                className="mf-quiet h-[34px] rounded-md text-[12.5px] font-bold transition-colors disabled:opacity-50"
-                style={{ backgroundColor: "#e3ad4b", color: "#2c1d02" }}
-              >
-                Publish
-              </button>
-            )}
-
-            {form.status !== "live" && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  if (!window.confirm("Delete this form and its enquiries?")) return;
-                  startTransition(async () => {
-                    const result = await deleteFormAction(form.id);
-                    if (result.ok) router.push("/marketing/forms");
-                    else setStatus({ tone: "error", text: result.error });
-                  });
-                }}
-                className="mf-quiet h-[34px] rounded-md border border-hairline text-[12.5px] font-semibold transition-colors hover:bg-paper-warm disabled:opacity-50"
-                style={{ color: "#8a4b48" }}
-              >
-                Delete
-              </button>
-            )}
-          </div>
-          {status && (
-            <p
-              className={`mt-2 text-[11.5px] font-semibold ${
-                status.tone === "ok" ? "text-ok" : "text-danger"
-              }`}
-            >
-              {status.text}
-            </p>
-          )}
+        <Card className="hidden lg:block">
+          <div className="flex flex-col gap-2">{actionButtons}</div>
+          {statusLine}
         </Card>
       </div>
     </div>

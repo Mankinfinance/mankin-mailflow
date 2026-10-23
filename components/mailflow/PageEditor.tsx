@@ -173,8 +173,10 @@ export function PageEditor({ page, forms, appUrl }: PageEditorProps) {
           </div>
         </Card>
 
-        <Card>
-          <div className="flex flex-col gap-2">
+        <Card className="sticky bottom-3 z-20">
+          {/* Pinned to the bottom of the column, so saving never means
+              scrolling past every block to find the button. */}
+          <div className="flex gap-2 [&>*]:flex-1">
             <button
               type="button"
               disabled={pending}

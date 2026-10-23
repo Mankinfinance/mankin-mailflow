@@ -12,6 +12,7 @@ import { SurveyControls } from "@/components/surveys/SurveyControls";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { repos } from "@/lib/db/repos";
 import { SurveyConfigSchema } from "@/lib/surveys/types";
+import { SurveyForm } from "@/components/surveys/SurveyForm";
 import { summariseSurvey } from "@/lib/surveys/scoring";
 
 export const metadata = { title: "Survey · Mailflow" };
@@ -53,7 +54,14 @@ export default async function SurveyPage({
     <>
       <MailflowNav active="surveys" />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <MailflowTopBar broker={{ name: broker.name, initials: broker.initials }} />
+        <MailflowTopBar
+          broker={{ name: broker.name, initials: broker.initials }}
+          record={{
+            name: survey.name,
+            status: survey.status,
+            backHref: "/marketing/surveys",
+          }}
+        />
         <MailflowContent>
           <div className="mb-3.5 flex items-start justify-between gap-4">
             <PageTitle
@@ -93,7 +101,25 @@ export default async function SurveyPage({
                   </p>
                 </Card>
               )}
-              <SurveyResults summaries={summaries} sent={survey.sent} />
+              <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-[minmax(0,1fr)_400px]">
+                <div className="min-w-0">
+                  <SurveyResults summaries={summaries} sent={survey.sent} />
+                </div>
+                {parsed.success && (
+                  <Card className="xl:sticky xl:top-3.5 xl:self-start">
+                    <Eyebrow className="mb-1.5">What clients see</Eyebrow>
+                    <p className="mb-4 text-[11.5px] text-ink-mute">
+                      Try it. Nothing you answer here is recorded.
+                    </p>
+                    <SurveyForm
+                      token="preview"
+                      config={parsed.data}
+                      alreadyAnswered={null}
+                      preview
+                    />
+                  </Card>
+                )}
+              </div>
             </>
           )}
         </MailflowContent>
