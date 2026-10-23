@@ -56,7 +56,7 @@ export function ReachRail({
   const empty = count === 0;
 
   return (
-    <div className="flex w-[320px] shrink-0 flex-col gap-3.5 self-start lg:sticky lg:top-3.5">
+    <div className="flex w-full flex-col gap-3.5 self-start lg:sticky lg:top-3.5 lg:w-[320px] lg:shrink-0">
       {/* ── Card 1: the count and its arithmetic ── */}
       <section
         className="overflow-hidden rounded-[10px] border border-hairline bg-surface"

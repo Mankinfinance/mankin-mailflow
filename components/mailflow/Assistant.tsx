@@ -28,6 +28,9 @@ const SUGGESTIONS = [
   "Which sequences are live, and what are they doing?",
 ];
 
+/** Dispatched on window to open the assistant. */
+export const OPEN_ASSISTANT_EVENT = "mailflow:open-assistant";
+
 export function MailflowAssistant({ firstName }: { firstName: string }) {
   const [open, setOpen] = React.useState(false);
   const [turns, setTurns] = React.useState<Turn[]>([]);
@@ -44,6 +47,13 @@ export function MailflowAssistant({ firstName }: { firstName: string }) {
   React.useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+
+  // The top bar's Help button opens the panel from anywhere.
+  React.useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(OPEN_ASSISTANT_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_ASSISTANT_EVENT, onOpen);
+  }, []);
 
   // Follow the reply as it streams in.
   React.useEffect(() => {

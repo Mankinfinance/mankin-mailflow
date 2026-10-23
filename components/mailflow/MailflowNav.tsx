@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { MailflowLogo } from "@/components/brand/MailflowLogo";
+import { MobileNav } from "./MobileNav";
+import { LOANFLOW_URL } from "@/lib/loanflow-url";
 
 /**
  * Mailflow's own 200px left navigation.
@@ -81,9 +83,23 @@ interface MailflowNavProps {
   footer?: React.ReactNode;
 }
 
+/* Below md the rail folds into a drawer; the links are the same. */
 export function MailflowNav({ active, footer }: MailflowNavProps) {
   return (
-    <nav className="flex w-[200px] shrink-0 flex-col border-r border-hairline bg-surface px-3 py-3.5">
+    <>
+      <nav className="hidden w-[200px] shrink-0 flex-col border-r border-hairline bg-surface px-3 py-3.5 md:flex">
+        <NavBody active={active} footer={footer} />
+      </nav>
+      <MobileNav>
+        <NavBody active={active} footer={footer} />
+      </MobileNav>
+    </>
+  );
+}
+
+function NavBody({ active, footer }: MailflowNavProps) {
+  return (
+    <>
       {/* Which product you are in. Every screen inside /marketing carries
           this, because the surrounding chrome is otherwise identical to
           LoanFlow's and a broker three clicks deep should never have to
@@ -99,8 +115,9 @@ export function MailflowNav({ active, footer }: MailflowNavProps) {
       {/* The way out: back to the launcher, and on to LoanFlow. Kept
           visually quieter than the wordmark above it — leaving is the
           rarer intent. */}
-      <Link
-        href="/"
+      <a
+        href={LOANFLOW_URL}
+        title="Switch to LoanFlow"
         className="mf-quiet mt-2.5 flex items-center gap-2 rounded-md border border-hairline bg-paper px-2 py-1.5 transition-colors hover:bg-paper-warm"
       >
         <span
@@ -116,7 +133,7 @@ export function MailflowNav({ active, footer }: MailflowNavProps) {
           <span className="block text-[9.5px] text-ink-mute">ACR 102746</span>
         </span>
         <ChevronsUpDown size={13} strokeWidth={1.5} className="shrink-0 text-ink-mute" />
-      </Link>
+      </a>
 
       <div className="mt-3 flex flex-col gap-px">
         {NAV.map((item) => {
@@ -138,7 +155,7 @@ export function MailflowNav({ active, footer }: MailflowNavProps) {
       </div>
 
       {footer && <div className="mt-auto pt-4">{footer}</div>}
-    </nav>
+    </>
   );
 }
 

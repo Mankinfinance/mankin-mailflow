@@ -265,21 +265,35 @@ async function lookupDkim(host: string): Promise<Lookup<string>> {
   return cname === "error" && txt === "error" ? "error" : "none";
 }
 
+/**
+ * A registered domain always has name servers. When even those come back
+ * "not found", the resolver is what failed, and every "missing" record
+ * would be a false alarm telling someone to add records that are there.
+ */
+export function trustLookups(records: SenderRecords, nameServers: Lookup<string[]>): SenderRecords {
+  if (nameServers !== "none" && nameServers !== "error" && nameServers.length > 0) return records;
+  return { ...records, txt: "error", dmarc: "error", selector1: "error", selector2: "error" };
+}
+
 export async function lookupSenderRecords(domain: string): Promise<SenderRecords> {
-  const [txt, dmarc, selector1, selector2] = await Promise.all([
+  const [txt, dmarc, selector1, selector2, ns] = await Promise.all([
     lookup(() => dns.resolveTxt(domain).then(joinTxt)),
     lookup(() => dns.resolveTxt(`_dmarc.${domain}`).then(joinTxt)),
     lookupDkim(`selector1._domainkey.${domain}`),
     lookupDkim(`selector2._domainkey.${domain}`),
+    lookup(() => dns.resolveNs(domain)),
   ]);
-  return {
-    domain,
-    txt,
-    dmarc,
-    selector1,
-    selector2,
-    appUrl: process.env.NEXT_PUBLIC_APP_URL,
-  };
+  return trustLookups(
+    {
+      domain,
+      txt,
+      dmarc,
+      selector1,
+      selector2,
+      appUrl: process.env.NEXT_PUBLIC_APP_URL,
+    },
+    ns,
+  );
 }
 
 /* DNS changes slowly and the dashboard renders often, so one answer is

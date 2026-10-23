@@ -92,9 +92,9 @@ export function AutomationTemplates({
   }
 
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col gap-4 md:flex-row md:gap-6">
       {/* Category rail */}
-      <div className="w-[190px] shrink-0">
+      <div className="w-full md:w-[190px] md:shrink-0">
         <div className="relative mb-3">
           <Search
             size={13}
@@ -108,27 +108,30 @@ export function AutomationTemplates({
             className="h-8 w-full rounded-md border border-hairline bg-surface pl-7 pr-2.5 text-[12px] text-ink placeholder:text-ink-faint"
           />
         </div>
-        <CategoryRow
-          label="All templates"
-          count={counts.all}
-          active={category === "all"}
-          onClick={() => setCategory("all")}
-        />
-        {TEMPLATE_CATEGORIES.map((c) => (
+        {/* A scrolling row of chips on a phone, a list beside the gallery above it. */}
+        <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:block md:overflow-visible md:p-0">
           <CategoryRow
-            key={c}
-            label={c}
-            count={counts[c] ?? 0}
-            active={category === c}
-            onClick={() => setCategory(c)}
+            label="All templates"
+            count={counts.all}
+            active={category === "all"}
+            onClick={() => setCategory("all")}
           />
-        ))}
+          {TEMPLATE_CATEGORIES.map((c) => (
+            <CategoryRow
+              key={c}
+              label={c}
+              count={counts[c] ?? 0}
+              active={category === c}
+              onClick={() => setCategory(c)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Gallery */}
       <div className="min-w-0 flex-1">
         {error && <p className="mb-3 text-[12px] text-danger">{error}</p>}
-        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
           {/* Blank canvas first, as the escape hatch from the library. */}
           <button
             type="button"
@@ -185,11 +188,12 @@ export function AutomationTemplates({
                     {template.volume}
                   </p>
                 )}
+                <div className="h-3 shrink-0" aria-hidden />
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => use(template.id)}
-                  className="mf-quiet mt-3 h-[30px] rounded-md text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  className="mf-quiet mt-auto h-[30px] shrink-0 rounded-md text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ backgroundColor: "#161461" }}
                 >
                   Use this template
@@ -223,7 +227,7 @@ function CategoryRow({
     <button
       type="button"
       onClick={onClick}
-      className="mf-quiet flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors"
+      className="mf-quiet flex shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors md:w-full"
       style={
         active
           ? { backgroundColor: "#eaeefe", color: "#161461", fontWeight: 600 }

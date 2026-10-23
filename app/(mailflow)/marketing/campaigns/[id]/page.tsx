@@ -3,6 +3,7 @@ import { MailflowNav } from "@/components/mailflow/MailflowNav";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import { MailflowContent, PageTitle } from "@/components/mailflow/MailflowPage";
 import { MailflowEditor } from "@/components/mailflow/MailflowEditor";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { CampaignReport } from "@/components/mailflow/CampaignReport";
 import { FollowUpButton } from "@/components/mailflow/FollowUpButton";
 import { ClickMap } from "@/components/mailflow/ClickMap";
@@ -41,12 +42,13 @@ export default async function MarketingCampaignPage({
   const audience = AudienceFilterSchema.parse(campaign.audience);
   const editable = isEditable(campaign.status as CampaignStatus);
 
-  const [stats, settlements, deals, allTags, segmentRows] = await Promise.all([
+  const [stats, settlements, deals, allTags, segmentRows, settings] = await Promise.all([
     repos().campaign.stats(campaign.id),
     listSettlements(),
     getSalestrekkerClient().listDeals(),
     repos().contactTag.counts(),
     repos().segment.list(),
+    currentSettings(),
   ]);
 
   /* A segment whose stored filter no longer parses is dropped rather
@@ -117,6 +119,8 @@ export default async function MarketingCampaignPage({
             deals: deals.filter((d) => d.nurturedAt === null).length,
           }}
           initialPreview={initial.ok ? initial.preview : null}
+          signature={settings.signature}
+          postalAddress={settings.postalAddress}
         />
       </Shell>
     );

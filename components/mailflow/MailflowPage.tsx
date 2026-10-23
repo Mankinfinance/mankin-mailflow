@@ -18,7 +18,13 @@ export function MailflowContent({
   className?: string;
 }) {
   return (
-    <div className={cn("flex-1 overflow-y-auto px-6 pb-[30px] pt-[22px]", className)}>
+    <div
+      className={cn(
+        // pb clears the floating "Ask Mailflow" button.
+        "flex-1 overflow-y-auto px-4 pb-24 pt-[22px] sm:px-6",
+        className,
+      )}
+    >
       {children}
     </div>
   );
@@ -35,7 +41,7 @@ export function PageTitle({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-[22px] flex items-start justify-between gap-4">
+    <div className="mb-[22px] flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="min-w-0">
         <h1
           className="text-[20px] leading-tight text-brand-deep"
@@ -45,7 +51,7 @@ export function PageTitle({
         </h1>
         {context && <p className="mt-1 text-[11px] text-ink-mute">{context}</p>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -108,11 +114,14 @@ export function StatGrid({
 }) {
   return (
     <div
-      className="grid gap-px overflow-hidden rounded-lg"
-      style={{
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        backgroundColor: "var(--color-hairline-softer)",
-      }}
+      // Two to a row on a phone, all of them from md up.
+      className="grid grid-cols-2 gap-px overflow-hidden rounded-lg md:[grid-template-columns:repeat(var(--stat-cols),minmax(0,1fr))]"
+      style={
+        {
+          "--stat-cols": columns,
+          backgroundColor: "var(--color-hairline-softer)",
+        } as React.CSSProperties
+      }
     >
       {children}
     </div>

@@ -26,7 +26,7 @@ export function PageTemplates() {
   return (
     <>
       {error && <p className="mb-3 text-[12px] text-danger">{error}</p>}
-      <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
         <button
           type="button"
           disabled={pending}

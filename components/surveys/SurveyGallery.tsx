@@ -106,11 +106,11 @@ export function SurveyGallery({ surveys }: { surveys: SurveySummary[] }) {
           survey nobody finishes tells you less than a shorter one everybody
           does.
         </p>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {SURVEY_TEMPLATES.map((t) => (
             <div
               key={t.id}
-              className="rounded-[10px] border border-hairline bg-surface px-4 py-3.5"
+              className="flex flex-col rounded-[10px] border border-hairline bg-surface px-4 py-3.5"
               style={{ boxShadow: "var(--shadow-card)" }}
             >
               <div className="flex items-center gap-1.5">
@@ -126,8 +126,9 @@ export function SurveyGallery({ surveys }: { surveys: SurveySummary[] }) {
               </p>
               <p className="mono mt-1.5 text-[10.5px] text-ink-faint">{t.when}</p>
 
+              <div className="h-3 shrink-0" aria-hidden />
               {naming === t.id ? (
-                <div className="mt-3 flex gap-2">
+                <div className="mt-auto flex gap-2">
                   <input
                     autoFocus
                     value={name}
@@ -157,7 +158,8 @@ export function SurveyGallery({ surveys }: { surveys: SurveySummary[] }) {
                     setName(t.name);
                     setError(null);
                   }}
-                  className="mf-quiet mt-3 h-[32px] w-full rounded-md border border-hairline bg-paper text-[12px] font-semibold text-ink-soft transition-colors hover:bg-paper-warm"
+                  className="mf-quiet mt-auto h-[30px] w-full shrink-0 rounded-md text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: "#161461" }}
                 >
                   Use this template
                 </button>

@@ -81,14 +81,28 @@ export default async function MailflowDashboard() {
      to, so the headline number is not larger than any campaign can be. */
   const suppressedSet = new Set(suppressions.map((s) => s.email));
   const contactable = new Set<string>();
-  for (const s of settlements) {
-    const email = s.email.trim().toLowerCase();
-    if (email && !suppressedSet.has(email)) contactable.add(email);
-  }
-  for (const d of deals) {
-    const email = d.email.trim().toLowerCase();
-    if (email && !suppressedSet.has(email)) contactable.add(email);
-  }
+  /* When each contact first appeared: a settlement's date, or the day a
+     deal was added. The earliest wins, so a settled client who later
+     starts a new application is not counted as new. */
+  const firstSeen = new Map<string, string>();
+  const note = (rawEmail: string, since: string | null | undefined) => {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email || suppressedSet.has(email)) return;
+    contactable.add(email);
+    const day = since?.slice(0, 10);
+    if (!day) return;
+    const prev = firstSeen.get(email);
+    if (!prev || day < prev) firstSeen.set(email, day);
+  };
+  for (const s of settlements) note(s.email, s.settlementDate);
+  for (const d of deals) note(d.email, d.systemAddedAt);
+
+  const sydneyDay = (d: Date) =>
+    d.toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
+  const todayIso = sydneyDay(new Date());
+  const monthIso = `${todayIso.slice(0, 7)}-01`;
+  const newToday = [...firstSeen.values()].filter((d) => d >= todayIso).length;
+  const newThisMonth = [...firstSeen.values()].filter((d) => d >= monthIso).length;
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -228,17 +242,17 @@ export default async function MailflowDashboard() {
                   <StatTile
                     label="Opened"
                     value={rate(lastStats.opened, lastStats.sent)}
-                    suffix="%"
+                    suffix={lastStats.sent ? "%" : undefined}
                   />
                   <StatTile
                     label="Clicked"
                     value={rate(lastStats.clicked, lastStats.sent)}
-                    suffix="%"
+                    suffix={lastStats.sent ? "%" : undefined}
                   />
                   <StatTile
                     label="Click to open"
                     value={rate(lastStats.clicked, lastStats.opened)}
-                    suffix="%"
+                    suffix={lastStats.opened ? "%" : undefined}
                   />
                 </StatGrid>
               </div>
@@ -261,7 +275,7 @@ export default async function MailflowDashboard() {
 
           <div className="mb-[22px] flex flex-wrap gap-3.5 pt-3">
             {/* Subscribers block */}
-            <Card className="w-[322px] shrink-0">
+            <Card className="w-full lg:w-[322px] lg:shrink-0">
               <div className="flex items-baseline gap-2">
                 <span
                   className="text-[40px] leading-none tabular-nums text-brand-deep"
@@ -272,19 +286,19 @@ export default async function MailflowDashboard() {
                 <span className="text-[11.5px] text-ink-mute">active contacts</span>
               </div>
               <p className="mt-2 text-[11px] leading-relaxed text-ink-mute">
-                Contacts arrive in monthly batches from the aggregator file.
-                Nothing is expected between imports.
+                Settled clients arrive with each month&apos;s commission
+                import; pipeline contacts as deals are added in LoanFlow.
               </p>
               <div className="mt-3 space-y-px">
                 <ZeroRow
                   label="New today"
-                  value={0}
-                  reason="none expected"
+                  value={newToday}
+                  reason={newToday ? "" : "none yet"}
                 />
                 <ZeroRow
                   label="New this month"
-                  value={0}
-                  reason="next import at month end"
+                  value={newThisMonth}
+                  reason={newThisMonth ? "" : "settlements land at month end"}
                 />
                 <ZeroRow
                   label="Opted out, 30 days"
@@ -299,15 +313,16 @@ export default async function MailflowDashboard() {
             </Card>
 
             {/* Growth chart */}
-            <Card className="min-w-[420px] flex-1">
+            <Card className="w-full min-w-0 lg:w-auto lg:min-w-[420px] lg:flex-1">
               <div className="mb-1 flex items-start justify-between gap-4">
                 <div>
                   <Eyebrow>Active contacts, last 30 days</Eyebrow>
                   <p className="mt-1 text-[11px] text-ink-mute">
-                    Flat by design. The axis is held to a 10-contact window so
-                    ordinary movement stays ordinary.
+                    The scale is kept tight on purpose, so a normal month
+                    looks flat and a real drop stands out.
                   </p>
                 </div>
+                {series.typicalHigh > series.typicalLow && (
                 <span
                   className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] text-ink-mute"
                   style={{ backgroundColor: "var(--color-paper-warm)" }}
@@ -318,6 +333,7 @@ export default async function MailflowDashboard() {
                   />
                   Typical range {series.typicalLow}–{series.typicalHigh}
                 </span>
+                )}
               </div>
               <ContactGrowthChart series={series} />
             </Card>
@@ -347,7 +363,7 @@ export default async function MailflowDashboard() {
                 <StatTile
                   label="Click to open"
                   value={rate(thisMonth.clicked, thisMonth.opened)}
-                  suffix="%"
+                  suffix={thisMonth.opened ? "%" : undefined}
                 />
               </StatGrid>
             </div>
@@ -359,14 +375,14 @@ export default async function MailflowDashboard() {
               <div>
                 <Eyebrow>Sending health, last 30 days</Eyebrow>
                 <p className="mt-1 max-w-[560px] text-[11px] leading-relaxed text-ink-mute">
-                  The two signals that move before a sending domain gets into
-                  trouble. Complaint rate is not shown because it is not
-                  obtainable on shared Exchange infrastructure.
+                  The two numbers that rise first when inboxes start to
+                  distrust your email. Spam complaints aren&apos;t reported
+                  to Microsoft 365 senders, so they can&apos;t be shown.
                 </p>
               </div>
               <HealthBadge band={health.overall} />
             </div>
-            <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <HealthCard
                 label="Opted out"
                 metric={health.unsubscribe}
@@ -511,8 +527,9 @@ export default async function MailflowDashboard() {
   );
 }
 
+/** A dash, not "0.0%", when nothing has been sent to divide by. */
 function rate(part: number, whole: number): string {
-  if (!whole) return "0.0";
+  if (!whole) return "—";
   return ((part / whole) * 100).toFixed(1);
 }
 

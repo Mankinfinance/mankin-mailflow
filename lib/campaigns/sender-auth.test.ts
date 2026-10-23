@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { evaluateSenderAuth, type SenderRecords } from "./sender-auth";
+import { evaluateSenderAuth, trustLookups, type SenderRecords } from "./sender-auth";
 
 /** Mankin Finance's records as they stood when this was written. */
 const today: SenderRecords = {
@@ -102,5 +102,21 @@ describe("evaluateSenderAuth", () => {
     expect(status({ ...done, appUrl: "https://example.org" }, "links")).toBe("warn");
     expect(status({ ...done, appUrl: undefined }, "links")).toBe("fail");
     expect(status({ ...done, appUrl: "http://localhost:3000" }, "links")).toBe("fail");
+  });
+});
+
+describe("trustLookups", () => {
+  it("turns 'missing' into 'could not check' when the domain itself does not resolve", () => {
+    // A broken resolver answers "not found" for everything, name servers
+    // included; that must not read as SPF, DKIM and DMARC all missing.
+    const blind = trustLookups({ ...today, txt: "none", dmarc: "none" }, "none");
+    const result = evaluateSenderAuth(blind);
+    expect(result.checks.slice(0, 3).map((c) => c.status)).toEqual(["unknown", "unknown", "unknown"]);
+  });
+
+  it("leaves real answers alone when the name servers are there", () => {
+    const r = trustLookups(today, ["dns1.p06.nsone.net"]);
+    expect(r).toEqual(today);
+    expect(evaluateSenderAuth(r).checks[1].status).toBe("fail");
   });
 });

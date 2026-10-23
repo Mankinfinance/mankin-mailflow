@@ -64,12 +64,6 @@ export default async function MailflowSettingsPage() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <MailflowTopBar broker={{ name: broker.name, initials: broker.initials }} />
         <MailflowContent>
-          {/* First thing on the page, because "is any of this being
-              kept" outranks every setting below it. */}
-          <DatabasePanel
-            config={databaseConfig()}
-            detailHref="/marketing/settings/database"
-          />
           <PageTitle
             title="Settings"
             context={
@@ -81,6 +75,13 @@ export default async function MailflowSettingsPage() {
                   })}`
                 : "Running on defaults — nothing saved yet"
             }
+          />
+
+          {/* First thing under the title, because "is any of this being
+              kept" outranks every setting below it. */}
+          <DatabasePanel
+            config={databaseConfig()}
+            detailHref="/marketing/settings/database"
           />
 
           <ConnectionTests />

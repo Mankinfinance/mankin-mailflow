@@ -88,7 +88,7 @@ export function SignatureForm({
           underneath and cannot be removed.
         </p>
 
-        <div className="grid gap-x-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
           <TextField label="Sign-off" value={draft.signOff} onChange={(v) => patch({ signOff: v })} placeholder="Regards" />
           <TextField label="Website" value={draft.websiteUrl} onChange={(v) => patch({ websiteUrl: v })} placeholder="https://www.mankinfinance.com.au" />
           <TextField label="Instagram profile" value={draft.instagramUrl} onChange={(v) => patch({ instagramUrl: v })} placeholder="https://www.instagram.com/…" />

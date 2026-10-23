@@ -17,6 +17,7 @@ import { checkContent, contentVerdict } from "@/lib/campaigns/spam-check";
 import type { AudienceFilter } from "@/lib/campaigns/types";
 import type { SendWindow } from "@/lib/campaigns/engagement";
 import { AudienceSentence } from "./AudienceSentence";
+import type { SignatureSettings } from "@/lib/mailflow/settings";
 import { MessagePanel, PanelShell } from "./MessagePanel";
 import { ReachRail } from "./ReachRail";
 
@@ -57,6 +58,9 @@ export interface MailflowEditorProps {
   /** The hour the firm's contacts click most, shown beside the
    *  scheduler. Null when there is not enough to say. */
   bestHour: SendWindow | null;
+  /** For the body preview. */
+  signature?: SignatureSettings;
+  postalAddress?: string;
 }
 
 export function MailflowEditor({
@@ -69,6 +73,8 @@ export function MailflowEditor({
   sourceCounts,
   initialPreview,
   bestHour,
+  signature,
+  postalAddress,
 }: MailflowEditorProps) {
   const router = useRouter();
   const [draft, setDraft] = React.useState(campaign);
@@ -151,7 +157,7 @@ export function MailflowEditor({
   }
 
   return (
-    <div className="flex gap-5">
+    <div className="flex flex-col gap-5 lg:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px]">
         <MessagePanel
           name={draft.name}
@@ -163,6 +169,8 @@ export function MailflowEditor({
           audienceSize={preview?.count ?? 0}
           brokers={brokers}
           unknownFields={unknownFields}
+          signature={signature}
+          postalAddress={postalAddress}
           onChange={patch}
         />
 

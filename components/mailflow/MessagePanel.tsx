@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { CircleAlert, FlaskConical } from "lucide-react";
+import { previewEmail } from "@/lib/campaigns/preview";
+import type { SignatureSettings } from "@/lib/mailflow/settings";
 import { MIN_AUDIENCE_FOR_TEST, testGroupSize } from "@/lib/campaigns/ab-test";
 import { MERGE_FIELDS } from "@/lib/campaigns/audience";
 
@@ -29,6 +31,9 @@ export interface MessagePanelProps {
   fromBrokerId: string;
   brokers: Array<{ id: string; name: string; initials: string }>;
   unknownFields: string[];
+  /** For the preview: the firm's signature settings and postal address. */
+  signature?: SignatureSettings;
+  postalAddress?: string;
   onChange: (patch: {
     name?: string;
     subject?: string;
@@ -76,9 +81,12 @@ export function MessagePanel({
   fromBrokerId,
   brokers,
   unknownFields,
+  signature,
+  postalAddress,
   onChange,
 }: MessagePanelProps) {
   const bodyRef = React.useRef<HTMLTextAreaElement>(null);
+  const [mode, setMode] = React.useState<"write" | "preview">("write");
   const hasError = unknownFields.length > 0;
   const firstBad = unknownFields[0];
   const suggestion = firstBad ? suggestionFor(firstBad) : null;
@@ -86,6 +94,7 @@ export function MessagePanel({
   /** Insert at the caret rather than appending — a merge field belongs
    *  in the sentence being written, not at the end of the draft. */
   function insertField(field: string) {
+    setMode("write");
     const el = bodyRef.current;
     const token = `{{${field}}}`;
     if (!el) {
@@ -117,7 +126,7 @@ export function MessagePanel({
       label="Message"
       problem={hasError ? `${unknownFields.length} problem to fix` : null}
     >
-      <div className="mb-3 flex gap-2.5">
+      <div className="mb-3 flex flex-col gap-2.5 sm:flex-row">
         <label className="min-w-0 flex-1">
           <FieldLabel>Campaign name</FieldLabel>
           <input
@@ -126,7 +135,7 @@ export function MessagePanel({
             className="h-[34px] w-full rounded-md border border-hairline bg-surface px-2.5 text-[12.5px] text-ink"
           />
         </label>
-        <label className="w-[236px] shrink-0">
+        <label className="w-full sm:w-[236px] sm:shrink-0">
           <FieldLabel>Send from</FieldLabel>
           <select
             value={fromBrokerId}
@@ -170,8 +179,22 @@ export function MessagePanel({
       />
 
       <div>
-        <FieldLabel>Body</FieldLabel>
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <FieldLabel inline>Body</FieldLabel>
+          <ModeSwitch mode={mode} onChange={setMode} />
+        </div>
+        {mode === "preview" && (
+          <EmailPreview
+            subject={subject}
+            body={body}
+            brokerId={fromBrokerId}
+            fromName={brokers.find((b) => b.id === fromBrokerId)?.name ?? ""}
+            signature={signature}
+            postalAddress={postalAddress}
+          />
+        )}
         <textarea
+          hidden={mode === "preview"}
           ref={bodyRef}
           value={body}
           onChange={(e) => onChange({ body: e.target.value })}
@@ -429,6 +452,99 @@ function AbTestField({
             audience past {MIN_AUDIENCE_FOR_TEST}.
           </>
         )}
+      </p>
+    </div>
+  );
+}
+
+function ModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: "write" | "preview";
+  onChange: (m: "write" | "preview") => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Body view"
+      className="flex rounded-md border border-hairline bg-paper p-0.5"
+    >
+      {(["write", "preview"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={mode === m}
+          onClick={() => onChange(m)}
+          className={
+            "mf-quiet rounded-[5px] px-2.5 py-1 text-[11.5px] font-semibold transition-colors " +
+            (mode === m ? "bg-surface text-brand shadow-sm" : "text-ink-mute hover:text-ink")
+          }
+        >
+          {m === "write" ? "Write" : "Preview"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The email as a client receives it, for an example client and the real
+ * sending broker. Drawn in a sandboxed frame so the email's own inline
+ * styles apply and none of the app's do; links inside are inert.
+ */
+function EmailPreview({
+  subject,
+  body,
+  brokerId,
+  fromName,
+  signature,
+  postalAddress,
+}: {
+  subject: string;
+  body: string;
+  brokerId: string;
+  fromName: string;
+  signature?: SignatureSettings;
+  postalAddress?: string;
+}) {
+  const rendered = React.useMemo(
+    () => previewEmail({ subject, body, brokerId, signature, postalAddress }),
+    [subject, body, brokerId, signature, postalAddress],
+  );
+  const frameRef = React.useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = React.useState(480);
+
+  function fit() {
+    const doc = frameRef.current?.contentDocument;
+    if (doc?.body) setHeight(Math.max(240, doc.documentElement.scrollHeight + 8));
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border border-hairline bg-surface">
+      <div className="space-y-0.5 border-b border-hairline bg-paper px-4 py-2.5 text-[12px]">
+        <div className="truncate">
+          <span className="text-ink-faint">From </span>
+          <span className="text-ink-soft">{fromName}</span>
+        </div>
+        <div className="truncate">
+          <span className="text-ink-faint">Subject </span>
+          <span className="font-semibold text-ink">{rendered.subject || "(no subject)"}</span>
+        </div>
+      </div>
+      <iframe
+        ref={frameRef}
+        title="Email preview"
+        sandbox="allow-same-origin"
+        srcDoc={`<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>body{margin:0;padding:16px;background:#ffffff}</style></head><body>${rendered.html}</body></html>`}
+        onLoad={fit}
+        className="block w-full border-0"
+        style={{ height }}
+      />
+      <p className="border-t border-hairline bg-paper px-4 py-2 text-[11px] text-ink-mute">
+        Shown for an example client, Sarah Chen at Westpac. Each person gets
+        their own details, and links are live only in the real email.
       </p>
     </div>
   );

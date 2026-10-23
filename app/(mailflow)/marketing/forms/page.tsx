@@ -108,7 +108,7 @@ export default async function FormsPage({
           )}
 
           {visible.length > 0 && (
-            <div className="mb-[22px] grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mb-[22px] grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((form) => {
                 const parsed = FormConfigSchema.safeParse(form.config);
                 const submissions = counts[form.id] ?? 0;

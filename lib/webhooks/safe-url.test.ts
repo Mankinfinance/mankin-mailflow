@@ -1,4 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+/* No real DNS: example.com answers with its public address, and any IP
+   literal answers as itself, so these tests pass offline and in CI. */
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async (host: string) => {
+    if (/^[\d.]+$/.test(host) || host.includes(":")) return [{ address: host, family: host.includes(":") ? 6 : 4 }];
+    if (host === "example.com") return [{ address: "93.184.215.14", family: 4 }];
+    throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: "ENOTFOUND" });
+  }),
+}));
+
 import { checkWebhookUrl, isPrivateAddress } from "./safe-url";
 
 describe("isPrivateAddress — the ranges that turn this into an SSRF", () => {

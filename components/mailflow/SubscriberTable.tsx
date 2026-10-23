@@ -238,9 +238,11 @@ export function SubscriberTable({
                   />
                 </Th>
                 <Th>Name</Th>
-                <Th>Source</Th>
-                <Th>Owner</Th>
-                <Th align="right">Client since</Th>
+                {/* On a phone, name and status are what fit; the rest
+                    is a tap away in the detail panel. */}
+                <Th className="hidden md:table-cell">Source</Th>
+                <Th className="hidden sm:table-cell">Owner</Th>
+                <Th align="right" className="hidden md:table-cell">Client since</Th>
                 <Th>Status</Th>
               </tr>
             </thead>
@@ -288,13 +290,13 @@ export function SubscriberTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="hidden px-3 py-2.5 md:table-cell">
                     <SourcePill source={s.source} />
                   </td>
-                  <td className="px-3 py-2.5 text-[12px] text-ink-soft">
+                  <td className="hidden px-3 py-2.5 text-[12px] text-ink-soft sm:table-cell">
                     {brokerNames[s.brokerId] ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-ink-mute">
+                  <td className="hidden px-3 py-2.5 text-right text-[12px] tabular-nums text-ink-mute md:table-cell">
                     {s.since
                       ? new Date(s.since).toLocaleDateString("en-AU", {
                           month: "short",
@@ -394,7 +396,7 @@ function DetailPanel({
     v === null ? "—" : `$${Math.round(v).toLocaleString("en-AU")}`;
 
   return (
-    <aside className="ml-4 w-[372px] shrink-0 overflow-y-auto border-l border-hairline pl-4">
+    <aside className="fixed inset-0 z-40 overflow-y-auto bg-surface p-4 md:static md:z-auto md:ml-4 md:w-[372px] md:shrink-0 md:border-l md:border-hairline md:bg-transparent md:p-0 md:pl-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2
@@ -620,16 +622,19 @@ function Th({
   children,
   align = "left",
   width,
+  className,
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
   width?: string;
+  className?: string;
 }) {
   return (
     <th
       className={cn(
         "px-3 py-2 text-[10.5px] font-bold uppercase text-ink-faint",
         align === "right" ? "text-right" : "text-left",
+        className,
       )}
       style={{ letterSpacing: "0.12em", width }}
     >
