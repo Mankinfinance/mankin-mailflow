@@ -129,10 +129,19 @@ export function FileManager({
       </div>
 
       {files.length === 0 ? (
-        <p className="py-10 text-center text-[12.5px] text-ink-mute">
-          Nothing uploaded yet. An image here can be dropped into any campaign
-          body.
-        </p>
+        <div className="mx-auto max-w-[460px] py-10 text-center text-[12.5px] leading-relaxed text-ink-mute">
+          <p>Nothing uploaded yet.</p>
+          <p className="mt-1.5">
+            Images here go into a campaign body, or into your email
+            signature: upload a headshot, social icons or award badges, press{" "}
+            <span className="font-semibold text-ink-soft">Copy snippet</span>,
+            and paste it into{" "}
+            <a href="/marketing/settings#signature" className="font-semibold text-brand underline underline-offset-2">
+              Settings → Email signature
+            </a>
+            .
+          </p>
+        </div>
       ) : (
         <>
           <div className="mb-2 flex items-baseline justify-between">

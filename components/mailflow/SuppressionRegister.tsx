@@ -196,7 +196,8 @@ export function SuppressionRegister({
             <thead>
               <tr style={{ backgroundColor: "var(--color-paper-warm)" }}>
                 <Th>Email</Th>
-                <Th>How they came off</Th>
+                {/* The line under each address already says who added it. */}
+                <Th className="hidden sm:table-cell">How they came off</Th>
                 <Th align="right">Date</Th>
                 <Th align="right"> </Th>
               </tr>
@@ -210,15 +211,15 @@ export function SuppressionRegister({
                     className="border-t"
                     style={{ borderColor: "var(--color-hairline-softer)" }}
                   >
-                    <td className="px-3.5 py-2.5">
-                      <span className="mono block truncate text-[11.5px] text-ink">
+                    <td className="w-full max-w-0 px-3.5 py-2.5">
+                      <span className="mono block truncate text-[11.5px] text-ink" title={r.email}>
                         {r.email}
                       </span>
                       <span className="mt-0.5 block text-[11px] text-ink-mute">
                         {r.provenance}
                       </span>
                     </td>
-                    <td className="px-3.5 py-2.5">
+                    <td className="hidden px-3.5 py-2.5 sm:table-cell">
                       <span
                         className="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
                         style={{
@@ -234,14 +235,14 @@ export function SuppressionRegister({
                             : "Unsubscribe"}
                       </span>
                     </td>
-                    <td className="px-3.5 py-2.5 text-right text-[12px] tabular-nums text-ink-mute">
+                    <td className="whitespace-nowrap px-3.5 py-2.5 text-right text-[12px] tabular-nums text-ink-mute">
                       {new Date(r.createdAt).toLocaleDateString("en-AU", {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
                       })}
                     </td>
-                    <td className="px-3.5 py-2.5 text-right">
+                    <td className="whitespace-nowrap px-3.5 py-2.5 text-right">
                       <button
                         type="button"
                         onClick={() => setConfirming(r)}
@@ -264,15 +265,17 @@ export function SuppressionRegister({
 function Th({
   children,
   align = "left",
+  className = "",
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
+  className?: string;
 }) {
   return (
     <th
       className={`px-3.5 py-2 text-[10.5px] font-bold uppercase text-ink-faint ${
         align === "right" ? "text-right" : "text-left"
-      }`}
+      } ${className}`}
       style={{ letterSpacing: "0.12em" }}
     >
       {children}

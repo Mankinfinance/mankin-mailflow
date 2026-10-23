@@ -77,7 +77,7 @@ export function SignatureForm({
   );
 
   return (
-    <div className="mt-3.5 max-w-[640px] space-y-3.5">
+    <div id="signature" className="mt-3.5 max-w-[640px] scroll-mt-4 space-y-3.5">
       <Card>
         <Eyebrow>Email signature</Eyebrow>
         <p className="mb-3.5 mt-1 text-[12px] leading-relaxed text-ink-mute">

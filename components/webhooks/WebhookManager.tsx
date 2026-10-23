@@ -113,7 +113,7 @@ export function WebhookManager({ endpoints }: { endpoints: EndpointView[] }) {
       {adding ? (
         <Card>
           <Eyebrow className="mb-3">New endpoint</Eyebrow>
-          <div className="flex max-w-[560px] flex-col gap-3">
+          <div className="flex max-w-[880px] flex-col gap-3">
             <Field label="Name">
               <input
                 value={name}
@@ -134,7 +134,9 @@ export function WebhookManager({ endpoints }: { endpoints: EndpointView[] }) {
               />
             </Field>
             <Field label="What to send">
-              <div className="flex flex-col gap-1.5">
+              {/* Two columns where there is room: eleven choices in one
+                  column was most of a screen of scrolling. */}
+              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
                 {ALL_EVENTS.map((event) => {
                   const on = events.includes(event);
                   return (
@@ -183,7 +185,7 @@ export function WebhookManager({ endpoints }: { endpoints: EndpointView[] }) {
               />
             </Field>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 disabled={pending}
@@ -202,6 +204,12 @@ export function WebhookManager({ endpoints }: { endpoints: EndpointView[] }) {
                   Cancel
                 </button>
               )}
+              {/* Beside the button that caused it, not under the card. */}
+              {error && (
+                <span role="alert" className="text-[12px]" style={{ color: "#8a3733" }}>
+                  {error}
+                </span>
+              )}
             </div>
           </div>
         </Card>
@@ -217,8 +225,8 @@ export function WebhookManager({ endpoints }: { endpoints: EndpointView[] }) {
         </button>
       )}
 
-      {error && (
-        <p className="text-[12px]" style={{ color: "#8a3733" }}>
+      {error && !adding && (
+        <p role="alert" className="text-[12px]" style={{ color: "#8a3733" }}>
           {error}
         </p>
       )}
@@ -298,7 +306,7 @@ function EndpointCard({
 
   return (
     <Card>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Webhook size={14} strokeWidth={1.7} className="shrink-0 text-brand" />
@@ -327,7 +335,7 @@ function EndpointCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             disabled={pending}
