@@ -22,6 +22,7 @@ on:
     paths:
       - "mobile/**"
       - ".github/workflows/mobile-android.yml"
+      - ".github/scripts/android-smoke.sh"
   workflow_dispatch:
 
 permissions:
@@ -121,3 +122,62 @@ jobs:
             --title "Mailflow for Android ${MAILFLOW_VERSION_NAME}" \
             --notes "$NOTES" \
             --latest
+
+  # Opens the new build on an emulator and keeps a screenshot of what it
+  # shows, so "the app won't load" can be seen rather than guessed at.
+  # The screenshot and log go on a draft release, "Android smoke test",
+  # which only people with access to the repository can see. Never
+  # blocks the build: the APK above is already published.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mailflow-android-apk
+          path: apk
+
+      - name: How the live site answers the app
+        run: |
+          curl -sS -o /dev/null -D - -L --max-redirs 6 --max-time 30 \
+            -A "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36 MailflowApp/1.0" \
+            -H "X-Requested-With: au.com.mankinfinance.mailflow" \
+            https://mankin-mailflow.vercel.app/marketing | grep -iE '^(HTTP|location|x-vercel)' || true
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Open the app on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash .github/scripts/android-smoke.sh
+
+      - name: Keep the screenshot
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f smoke/launch.png ] || exit 0
+          cp smoke/launch.png "smoke/android-${{ github.run_number }}-launch.png"
+          cp smoke/logcat.txt "smoke/android-${{ github.run_number }}-log.txt"
+          if ! gh release view android-smoke-test --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create android-smoke-test --repo "$GITHUB_REPOSITORY" --draft \
+              --title "Android smoke test" \
+              --notes "Screenshots of each Android build opening on an emulator. Kept as a draft, for checking builds only."
+          fi
+          gh release upload android-smoke-test --repo "$GITHUB_REPOSITORY" --clobber \
+            "smoke/android-${{ github.run_number }}-launch.png" "smoke/android-${{ github.run_number }}-log.txt"

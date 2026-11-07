@@ -57,6 +57,17 @@ unknown apps" for the browser or Files app when Android asks.
 Google Play: a Play Console developer account (one-off US$25). Upload the
 `.aab`; for staff only, use **Internal testing** and add their emails.
 
+After each build, a second job opens the app on an emulator and puts a
+screenshot and the app's log on a draft release, **Android smoke test**
+(Releases page, visible only to people with access to the repository).
+It never stops a build; it's there to see what the app shows.
+
+When a page fails, `MailflowWebViewClient` decides what appears. A page
+the site answers with an error (a 401, 403 or 404) is shown as the site
+sent it. Only a page that never arrived gets the offline screen, which
+says whether the phone had a connection and shows the error code and
+address underneath, so a screenshot of it says what went wrong.
+
 ## iPhone
 
 Needs a Mac with Xcode, and an Apple Developer Program membership
