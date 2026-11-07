@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { canAccessAdmin, isUserDisabled } from "@/lib/auth/permissions";
 import { MailflowAssistant } from "@/components/mailflow/Assistant";
+import { NativeAppChrome } from "@/components/mailflow/NativeAppChrome";
 
 /**
  * Mailflow route-group layout — the marketing module's own shell.
@@ -34,6 +35,8 @@ export default async function MailflowLayout({
       {/* In the layout, which stays mounted across navigation, so a
           question asked on one screen is still there on the next. */}
       <MailflowAssistant firstName={broker.name.split(" ")[0] || broker.name} />
+      {/* The mobile app's pull-to-refresh; nothing in a browser. */}
+      <NativeAppChrome />
     </div>
   );
 }

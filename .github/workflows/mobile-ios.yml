@@ -1,0 +1,58 @@
+# Checks the Mailflow iPhone app (mobile/ios) still builds, by compiling
+# it for the iOS Simulator. No Apple account or signing is needed for
+# that; installing on a real iPhone still needs Xcode and an Apple
+# Developer membership (see mobile/README.md).
+#
+# Runs when the iOS project or the app config changes, or on demand.
+# Mac build minutes cost more than Linux ones, so it does not run on
+# every change to mobile/.
+name: Mobile - iOS build check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/ios/**"
+      - "mobile/capacitor.config.json"
+      - "mobile/package.json"
+      - ".github/workflows/mobile-ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Copy the app config into the iOS project
+        run: npx cap sync ios
+
+      - name: Build for the iOS Simulator (unsigned)
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -40
+          test "${PIPESTATUS[0]}" -eq 0
+          ls "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/"

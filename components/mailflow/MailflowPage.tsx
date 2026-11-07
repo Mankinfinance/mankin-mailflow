@@ -19,6 +19,8 @@ export function MailflowContent({
 }) {
   return (
     <div
+      // Pull-to-refresh in the mobile app looks for this (NativeAppChrome).
+      data-mf-scroll=""
       className={cn(
         // pb clears the floating "Ask Mailflow" button.
         "flex-1 overflow-y-auto px-4 pb-[calc(96px+env(safe-area-inset-bottom))] pt-[22px] sm:px-6",
