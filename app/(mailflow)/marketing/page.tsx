@@ -39,6 +39,8 @@ import {
 
 import { checkSenderAuth } from "@/lib/campaigns/sender-auth";
 import { senderDomain } from "@/lib/mailflow/sending-config";
+import { createLoader } from "@/lib/mailflow/load";
+import { LoadProblems } from "@/components/mailflow/LoadProblems";
 
 export const metadata = { title: "Mailflow · Mankin Finance" };
 
@@ -57,21 +59,31 @@ export default async function MailflowDashboard() {
   // Started now, read at render, so the DNS lookups overlap the queries.
   const senderAuthPending = checkSenderAuth(senderDomain(broker.email));
 
+  /* Each source falls back to empty on its own and is listed at the top
+     when it does, so one failure is a note on the page, not a dead page. */
+  const { load, failures } = createLoader();
   const [campaigns, suppressions, settlements, deals, automations, forms] =
     await Promise.all([
-      repos().campaign.list(),
-      repos().campaign.listSuppressions(2000),
-      listSettlements(),
-      getSalestrekkerClient().listDeals(),
-      repos().automation.list(),
-      repos().form.list(),
+      load("Campaigns", () => repos().campaign.list(), []),
+      load("Unsubscribes", () => repos().campaign.listSuppressions(2000), []),
+      load("Settled clients", () => listSettlements(), []),
+      load("Deals", () => getSalestrekkerClient().listDeals(), []),
+      load("Sequences", () => repos().automation.list(), []),
+      load("Forms", () => repos().form.list(), []),
     ]);
 
   const recipientsByCampaign = new Map(
     await Promise.all(
       campaigns.map(
         async (c) =>
-          [c.id, await repos().campaign.listRecipients(c.id, { limit: 5000 })] as const,
+          [
+            c.id,
+            await load(
+              "Campaign recipients",
+              () => repos().campaign.listRecipients(c.id, { limit: 5000 }),
+              [],
+            ),
+          ] as const,
       ),
     ),
   );
@@ -117,7 +129,9 @@ export default async function MailflowDashboard() {
     .filter((c) => c.startedAt !== null)
     .sort((a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0));
   const last = sentCampaigns[0];
-  const lastStats = last ? await repos().campaign.stats(last.id) : null;
+  const lastStats = last
+    ? await load("Last campaign's results", () => repos().campaign.stats(last.id), null)
+    : null;
 
   const thisMonth = monthRows[0];
 
@@ -127,18 +141,22 @@ export default async function MailflowDashboard() {
   const automationRuns = (
     await Promise.all(
       automations.map((a) =>
-        repos().automation.listRuns(a.id, { limit: 5000 }),
+        load("Sequence runs", () => repos().automation.listRuns(a.id, { limit: 5000 }), []),
       ),
     )
   ).flat();
   const automationSends = (
     await Promise.all(
-      automationRuns.map((r) => repos().automation.latestSendForRun(r.id)),
+      automationRuns.map((r) =>
+        load("Sequence emails", () => repos().automation.latestSendForRun(r.id), null),
+      ),
     )
   ).filter((s): s is NonNullable<typeof s> => s !== null);
   const formSubmissions = (
     await Promise.all(
-      forms.map((f) => repos().form.listSubmissions(f.id, 5000)),
+      forms.map((f) =>
+        load("Form submissions", () => repos().form.listSubmissions(f.id, 5000), []),
+      ),
     )
   ).flat();
 
@@ -146,13 +164,7 @@ export default async function MailflowDashboard() {
      is not obtainable on shared Exchange infrastructure (see the note in
      lib/mailflow/sending-health.ts), so this is the pair of leading
      indicators we do own. */
-  const allRecipients = (
-    await Promise.all(
-      campaigns.map((c) =>
-        repos().campaign.listRecipients(c.id, { limit: 5000 }),
-      ),
-    )
-  ).flat();
+  const allRecipients = [...recipientsByCampaign.values()].flat();
   const health = buildSendingHealth({
     recipients: allRecipients,
     suppressions,
@@ -200,6 +212,8 @@ export default async function MailflowDashboard() {
             title="Dashboard"
             context={`${contactable.size} contactable · ${campaigns.length} campaign${campaigns.length === 1 ? "" : "s"} · ${suppressions.length} on the register`}
           />
+
+          <LoadProblems failures={failures} />
 
           {/* ── Last sent campaign ── */}
           {last && lastStats ? (

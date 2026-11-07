@@ -14,6 +14,8 @@ import { repos } from "@/lib/db/repos";
 import { buildSubscribers, countSubscribers } from "@/lib/campaigns/subscribers";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import { databaseConfig } from "@/lib/db/state";
+import { createLoader } from "@/lib/mailflow/load";
+import { LoadProblems } from "@/components/mailflow/LoadProblems";
 import { settingsFromEnv } from "@/lib/mailflow/settings";
 import { senderDomain, scheduledRunsPerDay } from "@/lib/mailflow/sending-config";
 
@@ -30,13 +32,16 @@ export const metadata = { title: "Settings · Mailflow" };
 export default async function MailflowSettingsPage() {
   const broker = await currentBroker();
 
+  /* Each source falls back on its own, so this page (and the Set up the
+     tables button on it) still opens when the database is behind. */
+  const { load, failures } = createLoader();
   const [settings, settlements, deals, suppressions, storedRow] =
     await Promise.all([
       currentSettings(),
-      listSettlements(),
-      getSalestrekkerClient().listDeals(),
-      repos().campaign.listSuppressions(5000),
-      repos().settings.get(),
+      load("Settled clients", () => listSettlements(), []),
+      load("Deals", () => getSalestrekkerClient().listDeals(), []),
+      load("Unsubscribes", () => repos().campaign.listSuppressions(5000), []),
+      load("Saved settings", () => repos().settings.get(), null),
     ]);
 
   const counts = countSubscribers(
@@ -79,10 +84,14 @@ export default async function MailflowSettingsPage() {
 
           {/* First thing under the title, because "is any of this being
               kept" outranks every setting below it. */}
-          <DatabasePanel
-            config={databaseConfig()}
-            detailHref="/marketing/settings/database"
-          />
+          <LoadProblems failures={failures} settingsLink={false} />
+
+          <div id="database" className="scroll-mt-4">
+            <DatabasePanel
+              config={databaseConfig()}
+              detailHref="/marketing/settings/database"
+            />
+          </div>
 
           <ConnectionTests />
           <SenderAuthCard auth={senderAuth} />
