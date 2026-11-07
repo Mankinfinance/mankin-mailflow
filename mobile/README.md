@@ -29,8 +29,11 @@ hides "Install Mailflow" there.
 ## Android
 
 GitHub builds it whenever this folder changes, or on demand: repository
-> **Actions** > **Mobile - Android** > **Run workflow**. The APK is under
-the run's **Artifacts**.
+> **Actions** > **Mobile - Android** > **Run workflow**. Each build is
+published as a release, **Mailflow for Android 1.0.N**, with the APK
+attached: on an Android phone, open
+`https://github.com/Mankinfinance/mankin-mailflow/releases/latest`
+(signed in to GitHub, as the repository is private) and tap the `.apk`.
 
 - **Test builds** (no signing secrets): install directly on a phone. A
   newer test build needs the old one uninstalled first.

@@ -1,8 +1,12 @@
 # Builds the Mailflow Android app (mobile/) whenever the app shell
 # changes, or on demand from the Actions tab ("Run workflow").
 #
-# Output, under the run's Artifacts:
-#   mailflow-android-apk  - the app, to install directly on a phone
+# Output:
+#   A GitHub Release, "Mailflow for Android 1.0.<run>", with the .apk
+#   attached - open the repository's Releases page on an Android phone
+#   and tap the .apk to install. The newest is always .../releases/latest.
+#   Also under the run's Artifacts:
+#   mailflow-android-apk  - the same app
 #   mailflow-android-aab  - the bundle Google Play takes (signed builds only)
 #
 # Signed builds need four repository secrets (Settings > Secrets and
@@ -21,7 +25,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # write: to publish each build as a GitHub Release.
+  contents: write
 
 jobs:
   build:
@@ -95,3 +100,24 @@ jobs:
           name: mailflow-android-aab
           path: mobile/dist/*.aab
           retention-days: 90
+
+      - name: Publish as a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ steps.mode.outputs.signed }}
+        run: |
+          if [ "$SIGNED" = "true" ]; then KIND="signed"; else KIND="test build"; fi
+          NOTES="Mailflow for Android, $KIND, from ${GITHUB_SHA::7}.
+
+          Install: open the .apk below on an Android phone. If Android asks, allow your browser to install unknown apps."
+          if [ "$SIGNED" != "true" ]; then
+            NOTES="$NOTES
+
+          This is a test build: uninstall the previous Mailflow first, then install this one."
+          fi
+          gh release create "android-v${MAILFLOW_VERSION_NAME}" dist/*.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Mailflow for Android ${MAILFLOW_VERSION_NAME}" \
+            --notes "$NOTES" \
+            --latest
