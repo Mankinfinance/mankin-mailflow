@@ -20,6 +20,8 @@ Contacts come from:
 - The back-book: settled loans from the aggregator commission file (the "settlements" data shared with LoanFlow). Contacts arrive in monthly batches when the file is imported, so nothing new is expected between imports.
 - The live pipeline: the deals LoanFlow imports from Salestrekker into the shared database.
 
+Mailflow can be installed as an app on a computer or phone: click your name (top right) → "Install Mailflow app". In Chrome or Edge that opens the browser's install dialog; on an iPhone it is Safari → Share → Add to Home Screen; on a Mac in Safari, File → Add to Dock. The installed app opens in its own window at the dashboard and shows a "You're offline" page without a connection. It is the same Mailflow, so nothing needs setting up twice.
+
 Left navigation, top to bottom: Dashboard, Subscribers, Campaigns, Automations, Forms, Surveys, Landing pages, Templates, File manager, Webhooks, Settings. The gold "+ Create" button is top right.
 
 # Dashboard

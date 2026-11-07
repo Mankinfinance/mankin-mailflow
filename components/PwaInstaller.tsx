@@ -1,27 +1,36 @@
 "use client";
 
 import * as React from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
+import {
+  isStandalone,
+  markInstalled,
+  promptInstall,
+  rememberInstallPrompt,
+  type InstallEvent,
+} from "@/lib/pwa-install";
 
 /**
- * PWA installer: registers the service worker on mount and, when the
- * browser offers an install prompt, shows a small floating button so
- * the broker (or customer) can add LoanFlow to their home screen.
+ * PWA installer: registers the service worker and, when the browser
+ * offers an install prompt, shows a small floating button so staff can
+ * install Mailflow as an app on a phone or computer.
+ *
+ * Only inside Mailflow itself (/marketing). Clients reach forms,
+ * surveys, landing pages and unsubscribe pages on this same domain, and
+ * an "Install Mailflow" banner on a survey would be baffling to them.
  *
  * iOS Safari doesn't fire `beforeinstallprompt`. For those visitors we
- * show a one-line hint with the manual install gesture instead, on the
- * first visit only - dismissable + remembered in localStorage so it
- * doesn't nag.
+ * show a one-line hint with the manual install gesture instead, until
+ * dismissed. The account menu's "Install Mailflow app" stays available
+ * either way.
  */
-
-type InstallEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 const DISMISS_KEY = "mailflow.pwa.dismissed";
 
 export function PwaInstaller() {
+  const pathname = usePathname();
+  const inApp = pathname?.startsWith("/marketing") ?? false;
   const [prompt, setPrompt] = React.useState<InstallEvent | null>(null);
   const [iosHint, setIosHint] = React.useState(false);
   const [hidden, setHidden] = React.useState(false);
@@ -30,6 +39,7 @@ export function PwaInstaller() {
     /* Register the service worker. Wrapped in a 'load' listener so the
        SW install doesn't fight with first-paint work. */
     if (typeof window === "undefined") return;
+    if (!inApp) return;
     if (!("serviceWorker" in navigator)) return;
     const register = () => {
       navigator.serviceWorker.register("/sw.js").catch((err) => {
@@ -38,30 +48,40 @@ export function PwaInstaller() {
     };
     if (document.readyState === "complete") register();
     else window.addEventListener("load", register, { once: true });
-  }, []);
+  }, [inApp]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    if (localStorage.getItem(DISMISS_KEY) === "1") {
-      setHidden(true);
-      return;
+    /* A dismissed banner stays hidden, but the listener below still
+       runs so the account menu can offer the install later. */
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem(DISMISS_KEY) === "1";
+    } catch {
+      /* storage blocked: treat as not dismissed */
     }
+    if (dismissed) setHidden(true);
     /* Skip the prompt entirely when already running standalone (already
        installed). matchMedia handles Android/desktop, navigator the iOS
        case where standalone is a non-standard attribute. */
-    const standalone =
-      window.matchMedia?.("(display-mode: standalone)").matches ||
-      (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    if (standalone) {
+    if (isStandalone()) {
       setHidden(true);
       return;
     }
 
+    /* Kept even after the banner is dismissed, so the account menu can
+       still offer the browser's own install dialog. */
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setPrompt(e as InstallEvent);
+      rememberInstallPrompt(e as InstallEvent);
+    };
+    const onInstalled = () => {
+      markInstalled();
+      setHidden(true);
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
 
     /* iOS Safari: no install prompt event. Detect iOS Safari + first
        visit, show the manual hint. */
@@ -71,15 +91,15 @@ export function PwaInstaller() {
       !/CriOS|FxiOS|EdgiOS/i.test(navigator.userAgent);
     if (isIos && isSafari) setIosHint(true);
 
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
 
   async function install() {
-    if (!prompt) return;
-    await prompt.prompt();
-    const choice = await prompt.userChoice;
+    await promptInstall();
     setPrompt(null);
-    if (choice.outcome === "accepted") setHidden(true);
   }
 
   function dismiss() {
@@ -92,13 +112,13 @@ export function PwaInstaller() {
     }
   }
 
-  if (hidden) return null;
+  if (!inApp || hidden) return null;
   if (!prompt && !iosHint) return null;
 
   return (
     <div
       className={cn(
-        "fixed bottom-4 left-1/2 z-[70] -translate-x-1/2",
+        "fixed bottom-20 left-1/2 z-[70] w-max max-w-[calc(100vw-24px)] -translate-x-1/2 md:bottom-4",
         "flex items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-2 shadow-lg",
         "text-[12.5px] text-ink",
       )}

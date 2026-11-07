@@ -1,0 +1,13 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mailflow">
+  <title>Mailflow</title>
+  <!-- The Mailflow mark (components/brand/MailflowLogo, light tone) on
+       the brand navy, scaled to sit inside the maskable safe zone so
+       Android's circle and squircle crops never clip a line. -->
+  <rect width="512" height="512" fill="#1c2566"/>
+  <g transform="translate(70 22) scale(6)">
+    <rect x="6" y="18" width="46" height="6" rx="3" fill="#f0c26a"/>
+    <rect x="6" y="29" width="34" height="6" rx="3" fill="#ffffff"/>
+    <rect x="6" y="40" width="22" height="6" rx="3" fill="#ffffff"/>
+    <path d="M 8 52 Q 32 60 56 46" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.5"/>
+  </g>
+</svg>

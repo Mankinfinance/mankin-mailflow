@@ -138,6 +138,10 @@ export default {
         // browser can show "Install app" and render the desktop icon.
         // None of these are sensitive (the logo is on the login page).
         pathname === "/manifest.webmanifest" ||
+        // The service worker and its offline page: the browser fetches
+        // them to install the app, before anyone has signed in.
+        pathname === "/sw.js" ||
+        pathname === "/offline.html" ||
         pathname === "/favicon.ico" ||
         pathname.startsWith("/brand/") ||
         pathname.startsWith("/icons/");

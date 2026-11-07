@@ -1,18 +1,20 @@
 import type { MetadataRoute } from "next";
 
 /**
- * PWA manifest for the whole LoanFlow shell. Brokers install from
- * /dashboard and get the broker pipeline as a standalone app on their
- * phone or tablet home screen; customers install from /portal/[token]
- * and get the same shell tuned to their journey by start_url. iOS
- * Safari + Android Chrome both honour this file.
+ * What makes Mailflow installable: as an app on Windows and Mac (from
+ * Chrome or Edge, or Safari's Add to Dock) and on a phone's home screen
+ * (Android, and iPhone through Safari's Add to Home Screen). It opens
+ * in its own window at the dashboard.
  *
- * To regenerate icons for sharper home-screen art, run any icon-gen
- * tool on /public/brand/mankin-logo.png and write 192/512 PNGs under
- * /public/icons/ - then update the icons array below.
+ * The icons are drawn from public/icons/mailflow-icon.svg, the Mailflow
+ * mark on navy, kept inside the maskable safe zone. To change them,
+ * edit the SVG and re-render the 512, 192 and 180 (apple-touch) PNGs.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    /* A stable identity, so changing start_url later does not make
+       browsers think it is a different app and install it twice. */
+    id: "/marketing",
     name: "Mailflow",
     short_name: "Mailflow",
     description: "Email marketing for Mankin Finance, run off the loan book.",
@@ -33,6 +35,7 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/icons/mailflow-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
     ],
     /* Both of LoanFlow's shortcuts pointed at routes this app does not
        have, so a long-press on the installed icon offered two dead
@@ -43,6 +46,13 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: "Campaigns",
         description: "What has gone out, and what is drafted",
         url: "/marketing/campaigns",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Automations",
+        short_name: "Automations",
+        description: "Sequences and how far each client has got",
+        url: "/marketing/automations",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
       },
       {

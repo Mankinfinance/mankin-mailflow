@@ -46,6 +46,8 @@ const PUBLIC = [
   ["/api/auth/callback/microsoft-entra-id", "the OAuth callback"],
   ["/manifest.webmanifest", "PWA install"],
   ["/icons/icon-192.png", "PWA install"],
+  ["/sw.js", "the service worker that makes Mailflow installable"],
+  ["/offline.html", "the page an installed app shows offline"],
 ] as const;
 
 describe("paths a customer must reach without signing in", () => {
