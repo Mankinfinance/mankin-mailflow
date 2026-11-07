@@ -8,9 +8,13 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Raised for every release: CI passes the run number, so each
-        // build installs over the one before it.
-        versionCode (System.getenv("MAILFLOW_VERSION_CODE") ?: "1").toInteger()
-        versionName System.getenv("MAILFLOW_VERSION_NAME") ?: "1.0"
+        // build installs over the one before it. Worked out first: in
+        // Groovy, `versionCode (x).toInteger()` calls versionCode(x) and
+        // then converts what that returns, which is null.
+        def mailflowVersionCode = (System.getenv("MAILFLOW_VERSION_CODE") ?: "1").toInteger()
+        def mailflowVersionName = System.getenv("MAILFLOW_VERSION_NAME") ?: "1.0"
+        versionCode mailflowVersionCode
+        versionName mailflowVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
