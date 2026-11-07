@@ -31,9 +31,17 @@ export function markInstalled() {
   emit();
 }
 
+/** Inside the Android or iPhone app (mobile/), which adds "MailflowApp"
+ *  to its user agent. There is nothing to install there. */
+export function isNativeApp(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /\bMailflowApp\//.test(navigator.userAgent);
+}
+
 /** Already running as the installed app, not in a browser tab. */
 export function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
+  if (isNativeApp()) return true;
   return (
     window.matchMedia?.("(display-mode: standalone)").matches === true ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true

@@ -36,6 +36,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The native app shell has its own toolchain (Capacitor, Gradle, Xcode).
+    "mobile/**",
   ]),
 ]);
 

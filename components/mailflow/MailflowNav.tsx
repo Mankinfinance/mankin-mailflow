@@ -87,7 +87,7 @@ interface MailflowNavProps {
 export function MailflowNav({ active, footer }: MailflowNavProps) {
   return (
     <>
-      <nav className="hidden w-[200px] shrink-0 flex-col border-r border-hairline bg-surface px-3 py-3.5 md:flex">
+      <nav className="hidden w-[200px] shrink-0 flex-col border-r border-hairline bg-surface px-3 pb-[calc(14px+env(safe-area-inset-bottom))] pt-[calc(14px+env(safe-area-inset-top))] md:flex">
         <NavBody active={active} footer={footer} />
       </nav>
       <MobileNav>

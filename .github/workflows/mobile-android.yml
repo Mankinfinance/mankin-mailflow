@@ -1,0 +1,97 @@
+# Builds the Mailflow Android app (mobile/) whenever the app shell
+# changes, or on demand from the Actions tab ("Run workflow").
+#
+# Output, under the run's Artifacts:
+#   mailflow-android-apk  - the app, to install directly on a phone
+#   mailflow-android-aab  - the bundle Google Play takes (signed builds only)
+#
+# Signed builds need four repository secrets (Settings > Secrets and
+# variables > Actions): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. Without them it makes a debug
+# build, which installs and runs the same but must be uninstalled before
+# a later debug build will install over it.
+name: Mobile - Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      MAILFLOW_VERSION_CODE: ${{ github.run_number }}
+      MAILFLOW_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install
+        run: npm ci
+
+      - name: Copy the app config into the Android project
+        run: npx cap sync android
+
+      - name: Decide signed or debug
+        id: mode
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else echo "signed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build (signed release)
+        if: steps.mode.outputs.signed == 'true'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          MAILFLOW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MAILFLOW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MAILFLOW_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/mailflow.keystore"
+          export MAILFLOW_KEYSTORE_PATH="$RUNNER_TEMP/mailflow.keystore"
+          cd android && ./gradlew --no-daemon assembleRelease bundleRelease
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk "../dist/Mailflow-${MAILFLOW_VERSION_NAME}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "../dist/Mailflow-${MAILFLOW_VERSION_NAME}.aab"
+
+      - name: Build (debug)
+        if: steps.mode.outputs.signed != 'true'
+        run: |
+          cd android && ./gradlew --no-daemon assembleDebug
+          mkdir -p ../dist
+          cp app/build/outputs/apk/debug/app-debug.apk "../dist/Mailflow-${MAILFLOW_VERSION_NAME}-debug.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mailflow-android-apk
+          path: mobile/dist/*.apk
+          retention-days: 90
+
+      - uses: actions/upload-artifact@v4
+        if: steps.mode.outputs.signed == 'true'
+        with:
+          name: mailflow-android-aab
+          path: mobile/dist/*.aab
+          retention-days: 90

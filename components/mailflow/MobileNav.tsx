@@ -43,7 +43,7 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
         onClick={() => setOpen(true)}
         aria-label="Open menu"
         aria-expanded={open}
-        className="mf-quiet fixed left-3 top-[10px] z-30 flex h-8 w-8 items-center justify-center rounded-md text-ink-soft transition-colors hover:bg-paper-warm md:hidden"
+        className="mf-quiet fixed left-3 top-[calc(10px+env(safe-area-inset-top))] z-30 flex h-8 w-8 items-center justify-center rounded-md text-ink-soft transition-colors hover:bg-paper-warm md:hidden"
       >
         <Menu size={17} strokeWidth={1.75} />
       </button>
@@ -55,12 +55,12 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-ink/30"
           />
-          <div className="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col overflow-y-auto border-r border-hairline bg-surface px-3 py-3.5 shadow-xl">
+          <div className="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col overflow-y-auto border-r border-hairline bg-surface px-3 pb-[calc(14px+env(safe-area-inset-bottom))] pt-[calc(14px+env(safe-area-inset-top))] shadow-xl">
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close menu"
-              className="mf-quiet absolute right-2.5 top-3 flex h-7 w-7 items-center justify-center rounded-md text-ink-mute hover:bg-paper-warm"
+              className="mf-quiet absolute right-2.5 top-[calc(12px+env(safe-area-inset-top))] flex h-7 w-7 items-center justify-center rounded-md text-ink-mute hover:bg-paper-warm"
             >
               <X size={15} strokeWidth={1.75} />
             </button>

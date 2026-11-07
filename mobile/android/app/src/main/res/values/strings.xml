@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mailflow</string>
+    <string name="title_activity_main">Mailflow</string>
+    <string name="package_name">au.com.mankinfinance.mailflow</string>
+    <string name="custom_url_scheme">au.com.mankinfinance.mailflow</string>
+</resources>

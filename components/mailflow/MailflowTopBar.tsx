@@ -36,7 +36,7 @@ export function MailflowTopBar({
   createLabel = "Create",
 }: MailflowTopBarProps) {
   return (
-    <header className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-hairline bg-surface pl-14 pr-4 md:px-6">
+    <header className="flex h-[calc(52px+env(safe-area-inset-top))] shrink-0 items-center justify-between gap-3 border-b border-hairline bg-surface pl-14 pr-4 pt-[env(safe-area-inset-top)] md:px-6">
       <div className="flex min-w-0 items-center gap-2.5">
         {record && (
           <>

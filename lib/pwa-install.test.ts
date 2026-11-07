@@ -47,3 +47,23 @@ describe("promptInstall", () => {
     expect(await promptInstall()).toBe(false);
   });
 });
+
+describe("isStandalone", () => {
+  it("counts the Android and iPhone app as installed, so it never offers to install itself", async () => {
+    const { isStandalone, isNativeApp } = await import("./pwa-install");
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Linux; Android 15) AppleWebKit Chrome/131.0 Mobile Safari/537.36 MailflowApp/1.0",
+    });
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    expect(isNativeApp()).toBe(true);
+    expect(isStandalone()).toBe(true);
+  });
+
+  it("does not mistake a browser tab for the app", async () => {
+    const { isStandalone, isNativeApp } = await import("./pwa-install");
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0 Safari/537.36" });
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    expect(isNativeApp()).toBe(false);
+    expect(isStandalone()).toBe(false);
+  });
+});

@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import {
+  isNativeApp,
   isStandalone,
   markInstalled,
   promptInstall,
@@ -40,6 +41,8 @@ export function PwaInstaller() {
        SW install doesn't fight with first-paint work. */
     if (typeof window === "undefined") return;
     if (!inApp) return;
+    /* The native app has its own offline screen and nothing to install. */
+    if (isNativeApp()) return;
     if (!("serviceWorker" in navigator)) return;
     const register = () => {
       navigator.serviceWorker.register("/sw.js").catch((err) => {

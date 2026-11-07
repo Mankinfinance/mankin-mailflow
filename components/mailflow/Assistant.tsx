@@ -166,7 +166,7 @@ export function MailflowAssistant({ firstName }: { firstName: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mf-quiet fixed bottom-5 right-5 z-40 flex h-11 items-center gap-2 rounded-full px-4 text-[13px] font-bold shadow-lg transition-transform hover:-translate-y-0.5"
+        className="mf-quiet fixed bottom-[calc(20px+env(safe-area-inset-bottom))] right-5 z-40 flex h-11 items-center gap-2 rounded-full px-4 text-[13px] font-bold shadow-lg transition-transform hover:-translate-y-0.5"
         style={{ backgroundColor: "#161461", color: "#ffffff" }}
         aria-label="Ask the Mailflow assistant"
       >
@@ -180,7 +180,7 @@ export function MailflowAssistant({ firstName }: { firstName: string }) {
     <section
       role="dialog"
       aria-label="Mailflow assistant"
-      className="fixed inset-x-3 bottom-3 top-3 z-40 flex flex-col overflow-hidden rounded-xl border border-hairline bg-surface shadow-2xl sm:inset-x-auto sm:right-5 sm:top-[64px] sm:w-[400px]"
+      className="fixed inset-x-3 bottom-[calc(12px+env(safe-area-inset-bottom))] top-[calc(12px+env(safe-area-inset-top))] z-40 flex flex-col overflow-hidden rounded-xl border border-hairline bg-surface shadow-2xl sm:inset-x-auto sm:right-5 sm:top-[calc(64px+env(safe-area-inset-top))] sm:w-[400px]"
     >
       <header className="flex items-center justify-between gap-2 border-b border-hairline px-4 py-3">
         <div className="flex items-center gap-2">

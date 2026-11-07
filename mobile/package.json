@@ -1,0 +1,24 @@
+{
+  "name": "mailflow-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mailflow as a native app for Android and iPhone. A Capacitor shell around the live Mailflow site.",
+  "scripts": {
+    "sync": "cap sync",
+    "assets": "capacitor-assets generate --iconBackgroundColor '#1c2566' --iconBackgroundColorDark '#1c2566' --splashBackgroundColor '#1c2566' --splashBackgroundColorDark '#1c2566'",
+    "android:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:release": "cap sync android && cd android && ./gradlew assembleRelease bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.0"
+  }
+}

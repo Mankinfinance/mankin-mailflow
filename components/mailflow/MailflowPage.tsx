@@ -21,7 +21,7 @@ export function MailflowContent({
     <div
       className={cn(
         // pb clears the floating "Ask Mailflow" button.
-        "flex-1 overflow-y-auto px-4 pb-24 pt-[22px] sm:px-6",
+        "flex-1 overflow-y-auto px-4 pb-[calc(96px+env(safe-area-inset-bottom))] pt-[22px] sm:px-6",
         className,
       )}
     >

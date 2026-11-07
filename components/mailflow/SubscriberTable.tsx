@@ -396,7 +396,7 @@ function DetailPanel({
     v === null ? "—" : `$${Math.round(v).toLocaleString("en-AU")}`;
 
   return (
-    <aside className="fixed inset-0 z-40 overflow-y-auto bg-surface p-4 md:static md:z-auto md:ml-4 md:w-[372px] md:shrink-0 md:border-l md:border-hairline md:bg-transparent md:p-0 md:pl-4">
+    <aside className="fixed inset-0 z-40 overflow-y-auto bg-surface p-4 pt-[calc(16px+env(safe-area-inset-top))] md:static md:pt-0 md:z-auto md:ml-4 md:w-[372px] md:shrink-0 md:border-l md:border-hairline md:bg-transparent md:p-0 md:pl-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2

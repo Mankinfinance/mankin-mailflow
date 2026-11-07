@@ -1,0 +1,42 @@
+{
+  "appId": "au.com.mankinfinance.mailflow",
+  "appName": "Mailflow",
+  "webDir": "www",
+  "appendUserAgent": "MailflowApp/1.0",
+  "backgroundColor": "#f7f4ee",
+  "server": {
+    "url": "https://mankin-mailflow.vercel.app/marketing",
+    "errorPath": "offline.html",
+    "allowNavigation": [
+      "mankin-mailflow.vercel.app",
+      "login.microsoftonline.com",
+      "login.microsoft.com",
+      "login.live.com",
+      "*.msauth.net",
+      "*.msftauth.net",
+      "*.microsoftonline-p.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "never",
+    "limitsNavigationsToAppBoundDomains": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#1c2566",
+      "showSpinner": false
+    },
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "LIGHT"
+    }
+  }
+}

@@ -164,7 +164,7 @@ function StepPanel({
   return (
     <aside
       aria-label="Edit step"
-      className="fixed inset-0 z-40 flex flex-col overflow-y-auto bg-surface xl:sticky xl:inset-auto xl:top-3.5 xl:z-auto xl:max-h-[calc(100vh-110px)] xl:w-[460px] xl:shrink-0 xl:rounded-[10px] xl:border xl:border-hairline"
+      className="fixed inset-0 z-40 flex flex-col overflow-y-auto bg-surface pt-[env(safe-area-inset-top)] xl:sticky xl:pt-0 xl:inset-auto xl:top-3.5 xl:z-auto xl:max-h-[calc(100vh-110px)] xl:w-[460px] xl:shrink-0 xl:rounded-[10px] xl:border xl:border-hairline"
       style={{ boxShadow: "var(--shadow-card)" }}
     >
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-hairline bg-surface px-4 py-3">
