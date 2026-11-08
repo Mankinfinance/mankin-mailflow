@@ -8,7 +8,8 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
-    await repos().landingPage.recordView(id);
+    const page = await repos().landingPage.get(id);
+    if (page?.status === "published") await repos().landingPage.recordView(id);
   } catch (err) {
     console.error("[page view] failed to record", err);
   }

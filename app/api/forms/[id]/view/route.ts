@@ -25,7 +25,10 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
-    await repos().form.recordView(id);
+    /* Only a live form's views count; an unknown or draft id is
+       ignored rather than growing a counter nobody can see. */
+    const form = await repos().form.get(id);
+    if (form?.status === "live") await repos().form.recordView(id);
   } catch (err) {
     // Never let counting break the form that is being counted.
     console.error("[form view] failed to record", err);

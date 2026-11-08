@@ -93,9 +93,26 @@ export async function saveFormAction(input: {
     };
   }
 
+  if (input.name.length > 200) return { ok: false, error: "Keep the form's name shorter." };
+  const before = await repos().form.get(input.id);
+  if (!before) return { ok: false, error: "That form no longer exists." };
+
   await repos().form.update(input.id, {
     name: input.name.trim(),
     config: parsed.data,
+  });
+  /* A live form's destination decides which broker a stranger's
+     enquiry lands with, so the change is on the record. */
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "form.save",
+    meta: {
+      formId: input.id,
+      name: input.name.trim(),
+      status: before.status,
+      destination: parsed.data.destination,
+      destinationBefore: (before.config as { destination?: unknown } | null)?.destination ?? null,
+    },
   });
   revalidatePath(`/marketing/forms/${input.id}`);
   return { ok: true };

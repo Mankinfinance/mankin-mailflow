@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { currentBroker } from "@/lib/auth/current-broker";
+import { emailDomainAllowed } from "@/lib/auth/skip-auth";
+import { TEAM } from "@/lib/team";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
@@ -55,6 +57,23 @@ export async function saveSettingsAction(input: unknown): Promise<Result> {
     };
   }
 
+  /* Everything sent to this mailbox is read hourly and its senders are
+     unsubscribed (lib/campaigns/reconcile-unsubscribes.ts). Pointed at
+     a working inbox - support@, a broker's own - it would take every
+     client who writes in off the list. So: the firm's own domain, and
+     never a mailbox Mailflow sends from. */
+  if (mailto) {
+    if (!emailDomainAllowed(mailto)) {
+      return { ok: false, error: "The unsubscribe mailbox has to be one of the firm's own addresses." };
+    }
+    if (TEAM.some((m) => m.email && m.email.toLowerCase() === mailto.toLowerCase())) {
+      return {
+        ok: false,
+        error: "Use a mailbox kept only for unsubscribes. Everything sent to it unsubscribes the sender, so it can't be one people write to for anything else.",
+      };
+    }
+  }
+
   /* The signature has its own form and its own save. Taking it from
      what is stored, never from this form, means a Settings form left
      open with a stale copy cannot overwrite a signature saved since. */
@@ -67,10 +86,16 @@ export async function saveSettingsAction(input: unknown): Promise<Result> {
   await auditLog({
     actor: { type: "broker", id: broker.id },
     action: "mailflow.settings.save",
+    /* The values, before and after, not just whether they are set: the
+       unsubscribe mailbox decides whose mail unsubscribes people, and
+       the postal address is a legal requirement on every email. */
     meta: {
       batchSize: settings.batchSize,
-      hasPostalAddress: Boolean(settings.postalAddress.trim()),
-      hasUnsubscribeMailto: Boolean(mailto),
+      batchSizeBefore: stored.batchSize,
+      postalAddress: settings.postalAddress.trim(),
+      postalAddressBefore: stored.postalAddress,
+      unsubscribeMailto: mailto,
+      unsubscribeMailtoBefore: stored.unsubscribeMailto,
       trackOpensByDefault: settings.trackOpensByDefault,
       trackClicksByDefault: settings.trackClicksByDefault,
     },

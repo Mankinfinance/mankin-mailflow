@@ -110,10 +110,20 @@ export async function savePageAction(input: {
     return { ok: false, error: `Another page already lives at /p/${slug}.` };
   }
 
+  if (input.name.length > 200) return { ok: false, error: "Keep the page's name shorter." };
+  const before = await repos().landingPage.get(input.id);
+  if (!before) return { ok: false, error: "That page no longer exists." };
+
   await repos().landingPage.update(input.id, {
     name: input.name.trim() || "Untitled page",
     slug,
     config: parsed.data,
+  });
+  /* A published page changes the moment this saves, in public. */
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "page.save",
+    meta: { pageId: input.id, slug, slugBefore: before.slug, status: before.status },
   });
   revalidatePath(`/marketing/landing-pages/${input.id}`);
   return { ok: true, slug };

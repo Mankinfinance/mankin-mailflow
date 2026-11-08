@@ -7,7 +7,7 @@ import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { listSettlements } from "@/lib/settlements-store";
-import { teamMember } from "@/lib/team";
+import { TEAM, teamMember } from "@/lib/team";
 import type { NewCampaignRecipient } from "@/lib/db/schema";
 import { MERGE_FIELDS, resolveAudience } from "@/lib/campaigns/audience";
 import { unknownMergeFields } from "@/lib/campaigns/merge";
@@ -114,6 +114,25 @@ export async function saveCampaignAction(
     return { ok: false, error: "That audience filter isn't valid." };
   }
 
+  /* Server actions take any JSON a caller sends, whatever the editor
+     would have allowed, so the bounds are checked here. */
+  if (!TEAM.some((m) => m.id === input.fromBrokerId && m.email)) {
+    return { ok: false, error: "Choose who the campaign comes from." };
+  }
+  if (
+    !Number.isInteger(input.abTestPercent) ||
+    input.abTestPercent < 0 ||
+    input.abTestPercent > 50
+  ) {
+    return { ok: false, error: "The test share is 0% to 50%." };
+  }
+  if (input.name.length > 200 || input.subject.length > 300 || input.subjectB.length > 300) {
+    return { ok: false, error: "Keep the name and subject lines shorter." };
+  }
+  if (input.body.length > 100_000) {
+    return { ok: false, error: "That email is too long to send." };
+  }
+
   await repos().campaign.update(input.id, {
     name: input.name.trim(),
     subject: input.subject,
@@ -126,6 +145,22 @@ export async function saveCampaignAction(
     audience: parsed.data,
     trackOpens: input.trackOpens,
     trackClicks: input.trackClicks,
+  });
+  /* Who changed what goes out to clients. The body itself is in the
+     campaign; the log records that it changed, and the things that
+     decide who receives it and from whom. */
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "campaign.save",
+    meta: {
+      campaignId: input.id,
+      name: input.name.trim(),
+      fromBrokerId: input.fromBrokerId,
+      fromBrokerIdBefore: campaign.fromBrokerId,
+      subjectChanged: input.subject !== campaign.subject,
+      bodyChanged: input.body !== campaign.body,
+      audience: parsed.data,
+    },
   });
 
   revalidatePath(`/marketing/campaigns/${input.id}`);
