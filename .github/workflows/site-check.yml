@@ -61,3 +61,13 @@ jobs:
             echo | openssl s_client -connect "$(echo "$url" | cut -d/ -f3):443" -servername "$(echo "$url" | cut -d/ -f3)" 2>/dev/null \
               | openssl x509 -noout -subject -issuer -enddate 2>/dev/null || echo "(no certificate)"
           done
+
+      - name: Is the mail record being served?
+        run: |
+          NS=$(dig +short NS mankinfinance.com @1.1.1.1 | head -1)
+          got=$(dig +short CNAME mail.mankinfinance.com @"$NS")
+          if [ -z "$got" ]; then
+            echo "::error::$NS has no CNAME for mail.mankinfinance.com"
+            exit 1
+          fi
+          echo "mail.mankinfinance.com -> $got"
