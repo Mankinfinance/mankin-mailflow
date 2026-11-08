@@ -1,6 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
-import { authBypassEnabled } from "@/lib/auth/skip-auth";
+import { authBypassEnabled, emailDomainAllowed } from "@/lib/auth/skip-auth";
 
 /**
  * Edge-safe Auth.js config — providers + callbacks that don't touch
@@ -13,33 +13,18 @@ import { authBypassEnabled } from "@/lib/auth/skip-auth";
  * envs in web/.env.local. Phase 1 keeps SKIP_AUTH=true so the dashboard
  * runs without a real Entra tenant.
  *
- * Scopes:
- *  - openid / profile / email / User.Read: SSO basics.
- *  - Mail.ReadWrite: lets us POST /me/messages to create a real Outlook
- *    draft (with HTML body, bold, signature) the broker reviews before
- *    sending. Mail.ReadWrite is a superset of Mail.Read so we don't need
- *    that extra scope.
- *  - Mail.Send: allows the app to send mail as the signed-in broker via
- *    Graph /me/sendMail. Used by the Composer's "Send via Outlook" path
- *    when EMAIL_AUTOSEND=true.
- *  - Calendars.ReadWrite: lets the CX Manager calendar read the broker's
- *    live Outlook events (GET /me/calendarView) and book meetings on
- *    their calendar (POST /me/events), including Teams online meetings.
- *    Adding this scope requires brokers to re-consent — sign out and back
- *    in — before the token carries calendar access.
- *  - offline_access: returns a refresh token so we can renew the access
- *    token without bouncing the broker through sign-in again.
+ * Scopes: sign-in only (openid, profile, email, User.Read).
+ *
+ * This used to also ask for Mail.ReadWrite, Mail.Send,
+ * Calendars.ReadWrite and offline_access, and kept the resulting
+ * Microsoft access and refresh tokens in the session - which Auth.js
+ * returns as JSON from /api/auth/session to any script on the page.
+ * Mailflow never used them: it sends with the app's own Microsoft
+ * credentials (lib/clients/outlook-app-only.ts). A token nobody uses is
+ * only a token someone can steal, so they are neither requested nor
+ * kept.
  */
-const GRAPH_SCOPES = [
-  "openid",
-  "profile",
-  "email",
-  "offline_access",
-  "User.Read",
-  "Mail.ReadWrite",
-  "Mail.Send",
-  "Calendars.ReadWrite",
-];
+const GRAPH_SCOPES = ["openid", "profile", "email", "User.Read"];
 
 export default {
   providers: [
@@ -59,32 +44,27 @@ export default {
   },
   callbacks: {
     /**
-     * Persist the Microsoft access + refresh tokens in the JWT so server
-     * actions can call Graph as the broker without re-prompting. Access
-     * token rotates every ~1 hour; refresh token lasts ~90 days. Server
-     * actions check expiry and refresh via Microsoft's token endpoint.
+     * Only the firm's own accounts may sign in. The Entra issuer already
+     * limits sign-in to the Mankin tenant, but a tenant also holds guest
+     * users (B2B invitees with outside email addresses); they are turned
+     * away here, before a session exists.
      */
-    async jwt({ token, account }) {
-      if (account) {
-        token.msAccessToken = account.access_token ?? null;
-        token.msRefreshToken = account.refresh_token ?? null;
-        // expires_at is seconds since epoch when account.access_token expires.
-        token.msAccessTokenExpiresAt = account.expires_at ?? null;
-      }
-      return token;
+    signIn({ user, profile }) {
+      if (authBypassEnabled()) return true;
+      const email =
+        user?.email ??
+        (profile as { email?: string; preferred_username?: string } | undefined)?.email ??
+        (profile as { preferred_username?: string } | undefined)?.preferred_username;
+      return emailDomainAllowed(email);
     },
-    async session({ session, token }) {
-      // Expose just-enough so server actions can pick the tokens up via
-      // auth(). The client never sees these — they're only readable in
-      // server-side getMicrosoftAccessToken().
-      session.msAccessToken =
-        (token as { msAccessToken?: string | null }).msAccessToken ?? null;
-      session.msRefreshToken =
-        (token as { msRefreshToken?: string | null }).msRefreshToken ?? null;
-      session.msAccessTokenExpiresAt =
-        (token as { msAccessTokenExpiresAt?: number | null })
-          .msAccessTokenExpiresAt ?? null;
-      return session;
+    async jwt({ token }) {
+      /* Sessions created before the scopes were cut still carry the
+         Microsoft tokens; drop them the next time the cookie is read. */
+      const t = token as Record<string, unknown>;
+      delete t.msAccessToken;
+      delete t.msRefreshToken;
+      delete t.msAccessTokenExpiresAt;
+      return token;
     },
     authorized({ auth, request }) {
       // Auth is enforced on every deployment. Bypass is dev-only and requires

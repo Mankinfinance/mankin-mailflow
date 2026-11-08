@@ -49,6 +49,10 @@ export function isMasterAdmin(brokerId: string): boolean {
 
 /** True when the supplied id can reach the admin / setup surface. */
 export async function canAccessAdmin(brokerId: string): Promise<boolean> {
+  /* Disabled is checked here, not only in the layout, because server
+     actions and API routes are reached by POST without the layout ever
+     rendering. Every admin check in Mailflow goes through this. */
+  if (await isUserDisabled(brokerId)) return false;
   if (DEFAULT_ADMIN_ALLOWED.has(brokerId as TeamMemberId)) return true;
   const overrides = await listTeamPermissions();
   return overrides.some((r) => r.teamId === brokerId && r.isAdmin);

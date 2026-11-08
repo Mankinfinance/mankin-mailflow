@@ -52,6 +52,23 @@ const EMAIL_TO_TEAM: Record<string, TeamMemberId> = {
   "james@mankinfinance.com.au": "jp",
 };
 
+/**
+ * Who someone is when Mailflow does not know them: no session, or an
+ * account that is not on the team. Not a team id, so every permission
+ * check (canAccessAdmin, canAccessCx) answers no, and the layout sends
+ * them to /no-access.
+ */
+export const NO_ACCESS_ID = "no-access";
+const NO_ACCESS: CurrentBroker = {
+  id: NO_ACCESS_ID as TeamMemberId,
+  name: "No access",
+  short: "No access",
+  role: "Loan Associate",
+  email: "",
+  initials: "?",
+  avatarColor: "#8a8d96",
+};
+
 export const currentBroker = cache(async function currentBroker(): Promise<CurrentBroker> {
   // Mocked broker only in dev with an explicit SKIP_AUTH=true. On every
   // deployment (NODE_ENV=production) this is false, so the real Auth.js
@@ -69,16 +86,10 @@ export const currentBroker = cache(async function currentBroker(): Promise<Curre
   const session = await auth();
   const email = session?.user?.email?.toLowerCase();
 
-  // Fallback: no session at all. Could happen if SSO state is mid-flight
-  // or the cookie was cleared. Default to Michael rather than crashing
-  // the dashboard - middleware will redirect to /login on the next click
-  // if the session is genuinely missing.
-  if (!email) {
-    console.warn("[currentBroker] no signed-in session; falling back to Michael");
-    const fallback = TEAM.find((m) => m.id === "mm");
-    if (!fallback) throw new Error("Team table is empty");
-    return toCurrentBroker(fallback, "michael@mankinfinance.com");
-  }
+  /* No session: nobody. This used to fall back to Michael, and since
+     Michael is the Master Admin, anything that reached a server action
+     without a session ran with full access. */
+  if (!email) return NO_ACCESS;
 
   // Try the email map first.
   let memberId: string | undefined = EMAIL_TO_TEAM[email];
@@ -106,32 +117,28 @@ export const currentBroker = cache(async function currentBroker(): Promise<Curre
     const extras = await listTeamExtras();
     const extraMatch =
       extras.find((m) => m.email.toLowerCase() === email) ??
-      extras.find(
-        (m) => m.email.split("@")[0].toLowerCase() === email.split("@")[0],
-      );
+      (emailDomainAllowed(email)
+        ? extras.find(
+            (m) => m.email.split("@")[0].toLowerCase() === email.split("@")[0],
+          )
+        : undefined);
     if (extraMatch) {
       memberId = extraMatch.id;
       resolvedMember = extraMatch;
     }
   }
 
-  // If still unmatched, log and fall back to Michael. The dashboard
-  // loads, the broker can use it; M.M. updates EMAIL_TO_TEAM with their
-  // actual address whenever they get around to it.
+  /* Signed in, but not someone Mailflow knows: no access. Never Michael
+     (see above). Add them to the team in LoanFlow's Setup to let them in. */
   if (!memberId) {
-    console.warn(
-      `[currentBroker] signed-in email ${email} not in TEAM table; falling back to Michael. Add to EMAIL_TO_TEAM in lib/auth/current-broker.ts.`,
-    );
-    const fallback = TEAM.find((m) => m.id === "mm");
-    if (!fallback) throw new Error("Team table is empty");
-    return toCurrentBroker(fallback, email);
+    console.warn(`[currentBroker] signed-in email ${email} is not on the team; no access.`);
+    return NO_ACCESS;
   }
 
   const member = resolvedMember ?? TEAM.find((m) => m.id === memberId);
   if (!member) {
-    console.warn(`[currentBroker] resolved id ${memberId} but no member found`);
-    const fallback = TEAM.find((m) => m.id === "mm")!;
-    return toCurrentBroker(fallback, email);
+    console.warn(`[currentBroker] resolved id ${memberId} but no member found; no access.`);
+    return NO_ACCESS;
   }
   return toCurrentBroker(member, email);
 });

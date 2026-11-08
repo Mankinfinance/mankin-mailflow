@@ -18,6 +18,12 @@ export const config = {
      have no session, which silently breaks every scheduled job. The
      handlers are still safe - the bearer-token check is per-handler. */
   matcher: [
-    "/((?!_next/static|_next/image|api/cron/|brand/|favicon.ico|.*\\.png$|.*\\.svg$).*)",
+    /* Only real static folders are skipped. This used to skip any path
+       ending .png or .svg, so /marketing/campaigns/x.png reached the
+       campaign page - and its server actions - without the sign-in
+       check. Public images are under /brand/ and /icons/; everything
+       else goes through the proxy, whose `authorized` callback lets the
+       public paths through by name. */
+    "/((?!_next/static/|_next/image|api/cron/|brand/|icons/|favicon\\.ico$).*)",
   ],
 };
