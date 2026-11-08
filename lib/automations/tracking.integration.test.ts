@@ -78,6 +78,7 @@ const { findTrackedMessage, parseTrackingId } = await import(
 );
 const openRoute = await import("@/app/e/o/[token]/route");
 const clickRoute = await import("@/app/e/c/[token]/route");
+const { signClickTarget } = await import("@/lib/campaigns/tracking");
 const oneClickRoute = await import("@/app/api/e/u/[token]/route");
 
 const NOW = new Date("2026-08-25T09:00:00");
@@ -134,7 +135,9 @@ async function open(cid: string) {
 async function click(cid: string, url = "https://tidycal.com/book", em?: string) {
   const token = await tokenFor(cid, "click", em);
   await clickRoute.GET(
-    new Request(`https://app.example.com/e/c/${token}?u=${encodeURIComponent(url)}`),
+    new Request(
+      `https://app.example.com/e/c/${token}?u=${encodeURIComponent(url)}&h=${signClickTarget(token, url)}`,
+    ),
     params(token),
   );
 }
@@ -208,6 +211,28 @@ describe("a click through the real click route", () => {
     expect(send!.clickedAt).toBeInstanceOf(Date);
     expect(send!.openedAt).toBeInstanceOf(Date);
     expect(redirected).toEqual(["https://tidycal.com/book"]);
+  });
+
+  it("refuses a link whose destination was swapped: home page, nothing recorded", async () => {
+    const automation = await liveAnnualReview();
+    await tickAutomations(NOW);
+    const token = await tokenFor(await cidOfSend(0), "click");
+    const real = "https://tidycal.com/book";
+    // Signed for the real link, then pointed somewhere else.
+    await clickRoute.GET(
+      new Request(
+        `https://app.example.com/e/c/${token}?u=${encodeURIComponent("https://evil.example/phish")}&h=${signClickTarget(token, real)}`,
+      ),
+      params(token),
+    );
+    // And with no signature at all.
+    await clickRoute.GET(
+      new Request(`https://app.example.com/e/c/${token}?u=${encodeURIComponent("https://evil.example/phish")}`),
+      params(token),
+    );
+    expect(redirected.some((u) => u.includes("evil.example"))).toBe(false);
+    const send = await repos().automation.findSend(automation.id, "sarah@example.com");
+    expect(send!.clickedAt).toBeNull();
   });
 
   it("emits contact.clicked once, naming the sequence", async () => {

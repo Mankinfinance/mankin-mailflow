@@ -7,19 +7,15 @@ import { timingSafeEqualStr } from "@/lib/constant-time";
  * email). That is a precise reconnaissance oracle for an attacker.
  *
  * Fail closed: detail is served only when HEALTH_DIAGNOSTIC_TOKEN is set AND
- * the caller supplies it via `?token=` or the `x-health-token` header. With
+ * the caller supplies it in the `x-health-token` header (not the query string, which ends up in logs). With
  * the env var unset, no caller is ever authorised — the endpoints return a
  * bare liveness response or 401 instead.
  */
 export function diagnosticAuthorised(req: Request): boolean {
   const secret = process.env.HEALTH_DIAGNOSTIC_TOKEN?.trim();
   if (!secret) return false;
-  let provided = "";
-  try {
-    provided = new URL(req.url).searchParams.get("token") ?? "";
-  } catch {
-    provided = "";
-  }
-  if (!provided) provided = req.headers.get("x-health-token") ?? "";
+  /* Header only. A token in the query string is written into Vercel's
+     request logs, browser history and any proxy in between. */
+  const provided = req.headers.get("x-health-token") ?? "";
   return provided.length > 0 && timingSafeEqualStr(provided, secret);
 }

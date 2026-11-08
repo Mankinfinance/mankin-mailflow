@@ -1,5 +1,7 @@
 import "server-only";
+import { createHmac } from "node:crypto";
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
+import { timingSafeEqualStr } from "@/lib/constant-time";
 import { portalBaseUrl } from "@/lib/portal-link";
 
 /**
@@ -148,10 +150,30 @@ export async function buildRecipientLinks(args: {
       p: "click",
     });
     links.wrapUrl = (url: string) =>
-      `${base}/e/c/${clickToken}?u=${encodeURIComponent(url)}`;
+      `${base}/e/c/${clickToken}?u=${encodeURIComponent(url)}&h=${signClickTarget(clickToken, url)}`;
   }
 
   return links;
+}
+
+/**
+ * The click token says who clicked which email, but not where the link
+ * goes: that travels in `?u=`, which anyone holding a genuine link can
+ * edit. Without a check, every recipient (and everyone they forward an
+ * email to) could make the firm's own domain redirect to a phishing
+ * page. `h` is an HMAC over the token and the destination, so only the
+ * destination we wrote into the email is honoured.
+ */
+export function signClickTarget(clickToken: string, url: string): string {
+  return createHmac("sha256", secretKey())
+    .update(`mailflow-click-target\n${clickToken}\n${url}`)
+    .digest("base64url")
+    .slice(0, 22);
+}
+
+export function clickTargetSigned(clickToken: string, url: string, h: string | null): boolean {
+  if (!h) return false;
+  return timingSafeEqualStr(h, signClickTarget(clickToken, url));
 }
 
 /**

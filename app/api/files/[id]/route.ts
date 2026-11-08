@@ -52,7 +52,10 @@ export async function GET(
       "X-Content-Type-Options": "nosniff",
       /* Inline: this is an image in an email, not a download. The name
          is already stripped of anything header-breaking. */
-      "Content-Disposition": `inline; filename="${file.name}"`,
+      /* RFC 6266/5987: an ASCII fallback plus the real name encoded. A
+         raw name with characters outside Latin-1 (an emoji, Chinese)
+         made the header throw, and the image broke in every email. */
+      "Content-Disposition": `inline; filename="${file.name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     },
   });
 }

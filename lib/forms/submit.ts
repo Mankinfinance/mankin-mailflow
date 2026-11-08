@@ -105,6 +105,23 @@ export async function resolvePageAttribution(
   return embedsForm ? page.id : null;
 }
 
+const HOUR = 60 * 60 * 1000;
+
+async function overSubmissionLimits(
+  formId: string,
+  input: SubmissionInput,
+  now = Date.now(),
+): Promise<boolean> {
+  const recent = (await repos().form.listSubmissions(formId, 500)).filter(
+    (s) => now - new Date(s.submittedAt).getTime() < 24 * HOUR,
+  );
+  const lastHour = recent.filter((s) => now - new Date(s.submittedAt).getTime() < HOUR);
+  const email = input.email.trim().toLowerCase();
+  if (email && recent.some((s) => s.email === email)) return true;
+  if (input.ipAddress && lastHour.filter((s) => s.ipAddress === input.ipAddress).length >= 5) return true;
+  return lastHour.length >= 60;
+}
+
 export async function submitForm(
   form: FormRow,
   input: SubmissionInput,
@@ -121,6 +138,43 @@ export async function submitForm(
 
   const problem = validateSubmission(input, config);
   if (problem) return { ok: false, error: problem };
+
+  /* Only the questions this form asks, each capped. The route caps
+     sizes too; this decides which keys are kept at all, so a stranger
+     can't add their own "fields" to a deal's notes or a webhook. */
+  const asked = new Set<string>(config.fields);
+  const answers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input.answers)) {
+    if (asked.has(key) && !["name", "email", "phone"].includes(key)) {
+      answers[key] = String(value).slice(0, 2000);
+    }
+  }
+  input = {
+    ...input,
+    name: input.name.slice(0, 120),
+    email: input.email.slice(0, 254),
+    phone: input.phone.slice(0, 40),
+    answers,
+  };
+
+  /* Abuse. A public form that creates a deal and can start a sequence
+     is a way to make the firm email any address, and to fill the
+     pipeline with junk. Three limits, read from the submissions table
+     so they hold across every server instance:
+       - the same email on the same form within a day is one enquiry;
+       - one network address gets five enquiries an hour;
+       - a form takes sixty an hour in all.
+     Over a limit, the person still sees "thanks" (a bot learns nothing,
+     and a real person who double-clicked loses nothing) but nothing is
+     recorded, created or sent. */
+  if (await overSubmissionLimits(form.id, input)) {
+    await auditLog({
+      actor: { type: "system" },
+      action: "form.submit.limited",
+      meta: { formId: form.id },
+    });
+    return { ok: true, thanks: config.thanks, dealRef: null };
+  }
 
   // Record the enquiry before anything can fail.
   const submission = await repos().form.addSubmission({

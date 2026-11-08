@@ -284,9 +284,48 @@ export interface RenderedCampaign {
  * and body first so a {{booking_url}} inside a link target resolves
  * before the link is extracted.
  */
+/**
+ * Merge fields Mailflow fills in itself (the sender's details, links it
+ * minted). Everything else comes from a client's record, and some of
+ * that is typed by strangers: a public form's "name" becomes a deal's
+ * name becomes {{first_name}}.
+ */
+const SYSTEM_FIELDS = new Set([
+  "broker_name",
+  "broker_first_name",
+  "broker_phone",
+  "broker_email",
+  "booking_url",
+  "survey_link",
+]);
+
+/**
+ * Take the email's own syntax out of a client-supplied value, so it
+ * stays text. Without this, a form submitted with the name
+ * "[Your pre-approval is ready](https://evil.example)" put a working
+ * link - wrapped in the firm's own click tracking - into an email from a
+ * broker's mailbox. HTML is escaped later anyway; this is about the
+ * markdown link and image syntax and the internal placeholders.
+ */
+export function neutraliseMergeValue(value: string): string {
+  return value
+    .replace(/[[\]]/g, "")
+    .replace(/@@/g, "@")
+    .replace(/[\r\n]+/g, " ");
+}
+
+function safeFields(fields: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    out[key] = SYSTEM_FIELDS.has(key.toLowerCase()) ? value : neutraliseMergeValue(value ?? "");
+  }
+  return out;
+}
+
 export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
-  const subject = applyMergeFields(input.subject, input.fields).trim();
-  const mergedBody = resolveEmptyLinks(applyMergeFields(input.body, input.fields));
+  const fields = safeFields(input.fields);
+  const subject = applyMergeFields(input.subject, fields).trim();
+  const mergedBody = resolveEmptyLinks(applyMergeFields(input.body, fields));
   const { masked, links, images } = extractLinks(mergedBody);
   const wrapUrl = input.links.wrapUrl ?? ((url: string) => url);
 

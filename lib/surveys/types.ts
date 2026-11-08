@@ -57,10 +57,11 @@ export const SurveyStatusSchema = z.enum(["draft", "live", "closed"]);
 export type SurveyStatus = z.infer<typeof SurveyStatusSchema>;
 
 /** An answer per question id. Numbers for nps/rating, strings otherwise. */
-export const SurveyAnswersSchema = z.record(
-  z.string(),
-  z.union([z.number(), z.string()]),
-);
+/* Bounded: a response comes from a public page, so the keys, the text
+   and the number of answers are all capped. */
+export const SurveyAnswersSchema = z
+  .record(z.string().max(60), z.union([z.number().finite(), z.string().max(2000)]))
+  .refine((a) => Object.keys(a).length <= 50, "Too many answers.");
 export type SurveyAnswers = z.infer<typeof SurveyAnswersSchema>;
 
 /* -------------------------------------------------------------------------- */

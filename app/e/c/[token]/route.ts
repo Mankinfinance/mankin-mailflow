@@ -8,6 +8,7 @@ import {
   parseTrackingId,
 } from "@/lib/campaigns/tracked-message";
 import {
+  clickTargetSigned,
   safeRedirectTarget,
   verifyTrackingToken,
 } from "@/lib/campaigns/tracking";
@@ -47,11 +48,20 @@ export async function GET(
     const { token } = await params;
     const verified = await verifyTrackingToken(token, "click");
 
-    if (verified.ok || verified.reason === "expired") {
+    /* The token proves the email is ours; `h` proves the destination
+       is the one we wrote into it. Both, or the site root. */
+    if (
+      (verified.ok || verified.reason === "expired") &&
+      target &&
+      clickTargetSigned(token, url.searchParams.get("u") ?? "", url.searchParams.get("h"))
+    ) {
       destination = target;
     }
 
-    if (verified.ok) {
+    /* Only a click on a link we actually sent counts: a hand-edited
+       `?u=` must not mark someone as having clicked, put a stranger's
+       URL in the report's link table, or fire contact.clicked. */
+    if (verified.ok && destination) {
       const { cid, em } = verified.claims;
 
       /* Campaign or automation. This used to look for a campaign

@@ -77,12 +77,9 @@ export default {
       const isPublic =
         pathname.startsWith("/api/auth") ||
         pathname === "/api/health" ||
-        // External integration receivers authenticate with their own shared
-        // secret / API re-check, not a session, so they must reach their
-        // handler rather than being bounced to /login.
-        pathname.startsWith("/api/webhooks/") ||
-        pathname.startsWith("/api/breezedoc/") ||
-        pathname.startsWith("/portal/") ||
+        /* /api/webhooks/, /api/breezedoc/ and /portal/ were listed here
+           for LoanFlow; Mailflow has no routes there. Removed, so a
+           route added under those paths later is not public by accident. */
         // Campaign tracking + unsubscribe endpoints. These are opened
         // from a customer's inbox, so they can never require a session —
         // an unsubscribe link that bounces to /login is an unsubscribe
@@ -113,7 +110,6 @@ export default {
           pathname !== "/api/files/upload") ||
         pathname === "/login" ||
         pathname === "/" ||
-        pathname.startsWith("/styleguide") ||
         // PWA install assets must be readable without a session so the
         // browser can show "Install app" and render the desktop icon.
         // None of these are sensitive (the logo is on the login page).

@@ -274,3 +274,25 @@ describe("links whose target merged to nothing", () => {
     expect(out.text).toContain("Just reply to this email");
   });
 });
+
+describe("client-supplied merge values stay text", () => {
+  it("can't turn a name into a link or an image", async () => {
+    const { renderCampaign, neutraliseMergeValue } = await import("./merge");
+    expect(neutraliseMergeValue("[Sign here](https://evil.example)")).toBe("Sign here(https://evil.example)");
+    const out = renderCampaign({
+      subject: "Hi {{first_name}}",
+      body: "Hi {{first_name}}, [Book a time]({{booking_url}})\n\nFrom {{last_name}}",
+      fields: {
+        first_name: "[Your pre-approval is ready](https://evil.example)",
+        last_name: "![x](https://evil.example/pixel.png)",
+        booking_url: "https://tidycal.com/michael",
+      },
+      links: { unsubscribeUrl: "https://mail.mankinfinance.com/e/u/t", oneClickUrl: "https://mail.mankinfinance.com/api/e/u/t" },
+      brokerId: "mm",
+    } as Parameters<typeof renderCampaign>[0]);
+    expect(out.html).not.toMatch(/href="https:\/\/evil\.example/);
+    expect(out.html).not.toMatch(/<img[^>]+evil\.example/);
+    // The broker's own link still works.
+    expect(out.html).toMatch(/href="https:\/\/tidycal\.com\/michael"/);
+  });
+});

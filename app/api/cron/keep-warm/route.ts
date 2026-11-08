@@ -1,3 +1,4 @@
+import { timingSafeEqualStr } from "@/lib/constant-time";
 import { NextResponse } from "next/server";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
   // automatically once the env var is set. An unset secret is now a 401.
   {
     const auth = req.headers.get("authorization");
-    if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || !timingSafeEqualStr(auth ?? "", `Bearer ${cronSecret}`)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }

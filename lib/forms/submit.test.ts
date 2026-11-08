@@ -276,10 +276,10 @@ describe("landing page attribution", () => {
     const a = await page(form.id);
     const b = await page(form.id);
 
-    await submitForm(form, input({ pageId: a.id }));
-    await submitForm(form, input({ pageId: a.id }));
-    await submitForm(form, input({ pageId: b.id }));
-    await submitForm(form, input());
+    await submitForm(form, input({ pageId: a.id, email: "one@example.com" }));
+    await submitForm(form, input({ pageId: a.id, email: "two@example.com" }));
+    await submitForm(form, input({ pageId: b.id, email: "three@example.com" }));
+    await submitForm(form, input({ email: "four@example.com" }));
 
     expect(await repos().form.pageSubmissionCounts()).toEqual({
       [a.id]: 2,
@@ -288,6 +288,47 @@ describe("landing page attribution", () => {
     // The form's own total still counts every one of them.
     const byForm = await repos().form.submissionCounts();
     expect(byForm[form.id]).toBe(4);
+  });
+});
+
+describe("abuse limits", () => {
+  async function liveForm() {
+    return repos().form.create({
+      name: "Home loan enquiry",
+      type: "embedded",
+      status: "live",
+      config: config({ fields: ["name", "email", "phone", "loan-purpose"] }),
+      createdBy: "mm",
+    });
+  }
+
+  it("treats the same email on the same form within a day as one enquiry", async () => {
+    const form = await liveForm();
+    const first = await submitForm(form, input({ email: "victim@example.com" }));
+    const again = await submitForm(form, input({ email: "Victim@Example.com" }));
+    expect(first.ok && again.ok).toBe(true);
+    const rows = await repos().form.listSubmissions(form.id);
+    expect(rows.filter((r) => r.email === "victim@example.com")).toHaveLength(1);
+  });
+
+  it("takes five an hour from one network address, then quietly stops", async () => {
+    const form = await liveForm();
+    for (let i = 0; i < 8; i += 1) {
+      await submitForm(form, input({ email: `p${i}@example.com`, ipAddress: "203.0.113.9" }));
+    }
+    expect(await repos().form.listSubmissions(form.id)).toHaveLength(5);
+  });
+
+  it("keeps only the questions the form asks, and caps their length", async () => {
+    const form = await liveForm();
+    await submitForm(
+      form,
+      input({ email: "q@example.com", answers: { "loan-purpose": "x".repeat(5000), injected: "evil" } }),
+    );
+    const [row] = await repos().form.listSubmissions(form.id);
+    const answers = row.answers as Record<string, string>;
+    expect(Object.keys(answers)).not.toContain("injected");
+    expect((answers["loan-purpose"] ?? "").length).toBeLessThanOrEqual(2000);
   });
 });
 

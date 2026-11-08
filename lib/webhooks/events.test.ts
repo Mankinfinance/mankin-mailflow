@@ -57,7 +57,7 @@ describe("form.submitted", () => {
       config: {
         // A form must ask for at least an email or a phone, or nobody
         // can reply to the enquiry and it is rejected.
-        fields: ["name", "email"],
+        fields: ["name", "email", "loan-purpose"],
         thanks: "Thanks — we'll be in touch.",
         destination: { kind: "register-only" },
       },
@@ -70,14 +70,15 @@ describe("form.submitted", () => {
       name: "Sarah Chen",
       email: "Sarah@Example.com",
       phone: "0400 000 000",
-      answers: { goal: "Lower my rate" },
+      // Only the form's own questions are kept; "goal" is not one.
+      answers: { "loan-purpose": "Lower my rate", goal: "dropped" },
     });
 
     const lead = emitted.find((e) => e.event === "form.submitted");
     expect(lead).toBeDefined();
     expect(lead!.data.email).toBe("sarah@example.com");
     expect(lead!.data.name).toBe("Sarah Chen");
-    expect(lead!.data.answers).toEqual({ goal: "Lower my rate" });
+    expect(lead!.data.answers).toEqual({ "loan-purpose": "Lower my rate" });
     // register-only is a design choice, not a failure, and the payload
     // has to let a receiver tell the difference.
     expect(lead!.data.dealCreated).toBe(false);
