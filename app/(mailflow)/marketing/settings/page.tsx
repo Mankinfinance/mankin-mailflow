@@ -15,6 +15,7 @@ import { buildSubscribers, countSubscribers } from "@/lib/campaigns/subscribers"
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import { databaseConfig } from "@/lib/db/state";
 import { createLoader } from "@/lib/mailflow/load";
+import { migrateOnce } from "@/lib/db/auto-migrate";
 import { LoadProblems } from "@/components/mailflow/LoadProblems";
 import { settingsFromEnv } from "@/lib/mailflow/settings";
 import { senderDomain, scheduledRunsPerDay } from "@/lib/mailflow/sending-config";
@@ -34,7 +35,7 @@ export default async function MailflowSettingsPage() {
 
   /* Each source falls back on its own, so this page (and the Set up the
      tables button on it) still opens when the database is behind. */
-  const { load, failures } = createLoader();
+  const { load, failures } = createLoader({ heal: migrateOnce });
   const [settings, settlements, deals, suppressions, storedRow] =
     await Promise.all([
       currentSettings(),

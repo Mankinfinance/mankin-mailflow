@@ -128,10 +128,10 @@ export function DatabasePanel({
       ) : (
         <>
           <p className="mt-2 max-w-[620px] text-[12.5px] leading-relaxed text-ink-soft">
-            A database is connected. If Mailflow has just been deployed with
-            new features, its tables may not exist yet — setting them up is
-            safe to run at any time, and does nothing if there is nothing to
-            do.
+            A database is connected. Mailflow brings it up to date by itself
+            on every deploy, so there is normally nothing to do here. Setting
+            the tables up by hand is safe at any time, does nothing if they
+            are already current, and shows the reason if an update fails.
           </p>
 
           {config.migrationFilesShipped === 0 && (

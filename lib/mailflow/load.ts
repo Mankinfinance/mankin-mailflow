@@ -20,7 +20,7 @@ export interface LoadFailure {
 }
 
 const SETUP_FIX =
-  "Open Settings and press Set up the tables, in the \"Where the data lives\" panel at the top.";
+  "Mailflow couldn't update the database by itself. Open Settings and press Set up the tables, in the \"Where the data lives\" panel at the top, to see why.";
 const CONNECTION_FIX = "Open Settings and press Test connections to see what's wrong.";
 
 const UNREACHABLE = new Set([
@@ -90,14 +90,29 @@ export function describeLoadError(err: unknown): { message: string; fix: string 
   return { message, fix: "Reload the page. If it keeps happening, send a screenshot of this." };
 }
 
+/** True for the errors a database update fixes: a missing table or
+ *  column. */
+export function isSchemaBehind(err: unknown): boolean {
+  return chain(err).some((e) => e.code === "42P01" || e.code === "42703");
+}
+
 /** A loader for one page render: `load` never throws, and `failures`
- *  lists what fell back. */
-export function createLoader() {
+ *  lists what fell back. With `heal`, a source that fails because the
+ *  database is behind gets the updates applied and one more try. */
+export function createLoader(opts: { heal?: () => Promise<boolean> } = {}) {
   const failures: LoadFailure[] = [];
   async function load<T>(source: string, run: () => Promise<T>, fallback: T): Promise<T> {
     try {
       return await run();
-    } catch (err) {
+    } catch (first) {
+      let err = first;
+      if (opts.heal && isSchemaBehind(first)) {
+        try {
+          if (await opts.heal()) return await run();
+        } catch (retry) {
+          err = retry;
+        }
+      }
       console.error(`[mailflow] ${source} didn't load`, err);
       if (!failures.some((f) => f.source === source)) {
         failures.push({ source, ...describeLoadError(err) });

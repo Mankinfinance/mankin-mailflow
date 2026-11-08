@@ -40,6 +40,7 @@ import {
 import { checkSenderAuth } from "@/lib/campaigns/sender-auth";
 import { senderDomain } from "@/lib/mailflow/sending-config";
 import { createLoader } from "@/lib/mailflow/load";
+import { migrateOnce } from "@/lib/db/auto-migrate";
 import { LoadProblems } from "@/components/mailflow/LoadProblems";
 
 export const metadata = { title: "Mailflow · Mankin Finance" };
@@ -61,7 +62,7 @@ export default async function MailflowDashboard() {
 
   /* Each source falls back to empty on its own and is listed at the top
      when it does, so one failure is a note on the page, not a dead page. */
-  const { load, failures } = createLoader();
+  const { load, failures } = createLoader({ heal: migrateOnce });
   const [campaigns, suppressions, settlements, deals, automations, forms] =
     await Promise.all([
       load("Campaigns", () => repos().campaign.list(), []),

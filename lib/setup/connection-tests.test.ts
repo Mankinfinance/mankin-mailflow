@@ -110,6 +110,17 @@ describe("runConnectionTests", () => {
     expect(r.graph.fix).toContain("Grant admin consent");
   });
 
+  it("only warns when Mail.Read is missing, since sending still works", async () => {
+    const r = await byKey(deps({
+      routes: { "login.microsoftonline.com": () => json(200, { access_token: jwt(["Mail.Send"]) }) },
+    }));
+    expect(r.graph.status).toBe("warn");
+    expect(r.graph.detail).toContain("Sending works");
+    expect(r.graph.fix).toContain("tick Mail.Read");
+    expect(r.sending.status).toBe("pass");
+    expect(r.mailboxes).toBeUndefined();
+  });
+
   it("names a mailbox an access policy leaves out", async () => {
     const r = await byKey(deps({ routes: { "users/nathan": () => json(403, {}) } }));
     expect(r.mailboxes.status).toBe("warn");

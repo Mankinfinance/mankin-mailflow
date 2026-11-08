@@ -1,0 +1,39 @@
+# Looks at Mailflow's addresses from outside: what DNS says, and what
+# each one answers. Runs when this file changes, or on demand from the
+# Actions tab ("Run workflow"). Changes nothing; it only reads.
+name: Site check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/site-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DNS
+        run: |
+          for name in mail.mankinfinance.com mankin-mailflow.vercel.app; do
+            echo "== $name"
+            echo "CNAME: $(dig +short CNAME "$name" @1.1.1.1 | tr '\n' ' ')"
+            echo "A:     $(dig +short A "$name" @1.1.1.1 | tr '\n' ' ')"
+          done
+
+      - name: What each address answers
+        run: |
+          for url in https://mail.mankinfinance.com/api/health https://mankin-mailflow.vercel.app/api/health; do
+            echo "== $url"
+            curl -sS -o /dev/null --max-time 20 \
+              -w "status %{http_code}, TLS verify %{ssl_verify_result}, ip %{remote_ip}, %{time_total}s\n" \
+              "$url" || echo "(no answer)"
+            curl -sS -I --max-time 20 "$url" 2>&1 | grep -iE '^(HTTP|server|x-vercel|location)' || true
+            echo | openssl s_client -connect "$(echo "$url" | cut -d/ -f3):443" -servername "$(echo "$url" | cut -d/ -f3)" 2>/dev/null \
+              | openssl x509 -noout -subject -issuer -enddate 2>/dev/null || echo "(no certificate)"
+          done

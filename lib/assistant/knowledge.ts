@@ -90,7 +90,7 @@ Deal notes: Mailflow writes a note onto the client's deal automatically for a mi
 The pipeline is the deals LoanFlow imports from Salestrekker into the database both products share. There is no live connection to Salestrekker itself: nothing Mailflow does is sent to Salestrekker, and deals created by forms appear in LoanFlow's pipeline, not in Salestrekker. Never tell anyone something will appear in Salestrekker.
 
 # Settings
-The panel at the very top, "Where the data lives", says whether anything is being kept. "Set up the tables" applies database updates; it is safe to press at any time and does nothing when there is nothing to do. Press it after any Mailflow update. "Details" opens /marketing/settings/database, which shows the build, whether the database is reachable, and which tables exist.
+The panel at the very top, "Where the data lives", says whether anything is being kept. Database updates apply themselves: every production deploy applies them before the new version goes live, and the dashboard and Settings apply them if they find the database behind. "Set up the tables" does the same by hand; it is safe to press at any time, does nothing when there is nothing to do, and shows the reason if an update fails. Nobody needs to press it after an update. "Details" opens /marketing/settings/database, which shows the build, whether the database is reachable, and which tables exist.
 
 Next, "Connections": the "Test connections" button calls the database, Microsoft 365 (sign-in, Mail.Send and Mail.Read consent, and each broker's mailbox), Anthropic, the address in email links and the sending domain for real, and lists what is working and the fix for anything not. It sends no email. Your setup_status tool only sees whether variables are present, so when someone needs to know whether a key or secret actually works, send them to this button. Then the "Sending domain" card (SPF, DKIM, DMARC, link domain).
 
@@ -107,5 +107,5 @@ Hard bounces are found hourly by reading non-delivery reports in the sending mai
 - Sign-in fails with AADSTS50011: you started from a deployment-specific address (with a hash in it). Use https://mankin-mailflow.vercel.app.
 - A campaign sits at "sending" for a long time: normal for a large audience; it sends a paced batch every five minutes.
 - A campaign failed completely (campaign.failed): usually the Microsoft Graph sending credentials have expired or the mailbox is blocked. Tell Michael.
-- After an update, press "Set up the tables" in Settings.
+- A yellow note says the database is missing a table or column: Mailflow tried to update it and could not. Press "Set up the tables" in Settings to see why, and tell Michael.
 `.trim();

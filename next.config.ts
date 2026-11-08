@@ -59,6 +59,9 @@ const nextConfig: NextConfig = {
        zero is exactly the failure this whole block exists to catch,
        so it must not be produced by the reporting page being traced
        differently from the route that runs them. */
+    /* The dashboard and Settings apply the updates themselves when
+       they find the database behind (lib/db/auto-migrate). */
+    "/marketing": ["./drizzle/**/*"],
     "/marketing/settings": ["./drizzle/**/*"],
     "/marketing/settings/database": ["./drizzle/**/*"],
   },

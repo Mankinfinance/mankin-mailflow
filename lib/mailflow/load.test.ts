@@ -45,4 +45,30 @@ describe("createLoader", () => {
     expect(c).toEqual(["form"]);
     expect(failures.map((f) => f.source)).toEqual(["Campaigns"]);
   });
+
+  it("applies the database updates once and retries when a column is missing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const heal = vi.fn(async () => true);
+    const { load, failures } = createLoader({ heal });
+    let calls = 0;
+    const value = await load("Campaign recipients", async () => {
+      calls += 1;
+      if (calls === 1) throw drizzle(pg("42703"));
+      return ["row"];
+    }, []);
+    expect(value).toEqual(["row"]);
+    expect(heal).toHaveBeenCalledTimes(1);
+    expect(failures).toEqual([]);
+  });
+
+  it("doesn't try to heal other errors, and reports when healing didn't help", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const heal = vi.fn(async () => false);
+    const { load, failures } = createLoader({ heal });
+    await load("Deals", async () => { throw pg("ECONNREFUSED"); }, []);
+    expect(heal).not.toHaveBeenCalled();
+    await load("Forms", async () => { throw pg("42P01"); }, []);
+    expect(heal).toHaveBeenCalledTimes(1);
+    expect(failures.map((f) => f.source)).toEqual(["Deals", "Forms"]);
+  });
 });

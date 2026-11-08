@@ -144,15 +144,27 @@ async function testGraph(deps: ConnectionDeps): Promise<ConnectionResult[]> {
 
   const roles = rolesIn(token);
   const lacking = NEEDED_ROLES.filter((r) => !roles.includes(r));
+  const fix = (perms: string) =>
+    `Azure → the app → API permissions → Add a permission → Microsoft Graph → Application permissions → tick ${perms} → Grant admin consent.`;
   const out: ConnectionResult[] = [
     lacking.length === 0
       ? result({ ...base, status: "pass", detail: "Signed in to Microsoft. Mail.Send and Mail.Read are granted.", fix: "" })
-      : result({
-          ...base,
-          status: "fail",
-          detail: `Signed in, but ${lacking.join(" and ")} ${lacking.length === 1 ? "is" : "are"} not granted${lacking.includes("Mail.Send") ? ", so sending will be refused" : ", so bounces cannot be read"}.`,
-          fix: "Azure → the app → API permissions → Add a permission → Microsoft Graph → Application permissions → tick Mail.Send and Mail.Read → Grant admin consent.",
-        }),
+      : lacking.includes("Mail.Send")
+        ? result({
+            ...base,
+            status: "fail",
+            detail: `Signed in, but ${lacking.join(" and ")} ${lacking.length === 1 ? "is" : "are"} not granted, so sending will be refused.`,
+            fix: fix(lacking.join(" and ")),
+          })
+        : /* Mail.Send alone is enough to send. Mail.Read is for reading
+             bounce-backs, so missing it is worth fixing, not a stop. */
+          result({
+            ...base,
+            status: "warn",
+            detail:
+              "Sending works (Mail.Send is granted), but Mail.Read is not, so bounce-backs can't be read and bad addresses won't be taken off the list automatically. Mailboxes can't be checked without it either.",
+            fix: fix("Mail.Read"),
+          }),
   ];
   if (lacking.includes("Mail.Read")) return out;
 
@@ -331,7 +343,7 @@ export async function runConnectionTests(deps: ConnectionDeps): Promise<Connecti
     safe("domain", "Sending domain (DNS)", () => testDomain(deps)),
   ]);
   /* "Sent for real" is only true if something can send. */
-  const graphOk = [graph].flat().every((r) => r.key !== "graph" || r.status === "pass");
+  const graphOk = [graph].flat().every((r) => r.key !== "graph" || r.status !== "fail");
   let sending = testSending(deps.env);
   if (sending.status === "pass" && !graphOk) {
     sending = { ...sending, status: "skip", detail: "Not simulated, but nothing can send until Microsoft 365 is connected (above)." };

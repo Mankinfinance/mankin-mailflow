@@ -194,13 +194,27 @@ let Mailflow migrate it, or split the databases first.
 3. Redeploy. Environment variables are read by the running function,
    so a build made before the variable existed will not see it — the
    variable alone changes nothing until something redeploys.
-4. Open `/marketing/settings/database` and press **Set up the tables**.
+4. Nothing else. The redeploy applies the database updates itself.
 
-Step 4 is the same work `pnpm db:migrate` does, from a button, because
-the person who needs to do it is a mortgage broker rather than a
-release engineer. It applies the files in `drizzle/`, in order,
-skipping those already recorded, and running it twice does nothing the
-second time.
+Every production build runs `scripts/migrate-on-deploy.mjs` before
+`next build` (the `build` script in `package.json`, and `buildCommand`
+in `vercel.json`). It applies the files in `drizzle/`, in order,
+skipping those already recorded, so running it twice does nothing the
+second time. It only runs when `VERCEL_ENV=production`: preview builds
+share the production database, and a branch's unfinished migration
+must not reach it. `MIGRATE_ON_DEPLOY=false` turns it off.
+
+- **A migration fails:** the build fails and Vercel keeps the previous
+  version live. They run in one transaction, so nothing is
+  half-applied. The build log has the database's reason.
+- **The database can't be reached during the build:** the build
+  carries on with a warning. The dashboard and Settings then apply the
+  updates themselves the first time they find a table or column
+  missing (`lib/db/auto-migrate.ts`), and try again.
+
+**Set up the tables** (`/marketing/settings/database`, and the top of
+Settings) runs the same code by hand, and shows the reason when an
+update fails.
 
 Until it runs, the app still starts: a query against a table that does
 not exist yet is caught and falls back to empty rather than erroring
