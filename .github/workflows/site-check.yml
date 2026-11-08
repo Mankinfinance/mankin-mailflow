@@ -71,3 +71,39 @@ jobs:
             exit 1
           fi
           echo "mail.mankinfinance.com -> $got"
+
+      - name: Security checks against the live site
+        if: always()
+        run: |
+          B=https://mankin-mailflow.vercel.app
+          fail=0
+          check() { if [ "$2" = "$3" ]; then echo "ok   $1 ($2)"; else echo "::error::$1: got $2, expected $3"; fail=1; fi; }
+
+          # Signed out, every app page goes to sign-in - including paths
+          # ending .png/.svg, which used to skip the sign-in check.
+          for p in /marketing /marketing/campaigns/x.png /marketing/forms/x.svg /marketing/settings; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$B$p")
+            loc=$(curl -s -o /dev/null -w "%{redirect_url}" "$B$p")
+            check "signed out $p" "$code $(echo "$loc" | grep -o '/login' | head -1)" "307 /login"
+          done
+
+          # A server action POSTed to a .png path without a session must not run.
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Next-Action: 0000000000000000000000000000000000000000" "$B/marketing/campaigns/x.png")
+          check "server action on .png path, signed out" "$code" "307"
+
+          # No one else may frame the app; public forms may be embedded.
+          xfo=$(curl -s -I "$B/login" | tr -d '\r' | grep -i '^x-frame-options:' | cut -d' ' -f2)
+          check "X-Frame-Options on /login" "$xfo" "SAMEORIGIN"
+
+          # The session endpoint never carries Microsoft tokens.
+          if curl -s "$B/api/auth/session" | grep -qi "msAccessToken\|msRefreshToken"; then echo "::error::session JSON carries Microsoft tokens"; fail=1; else echo "ok   session JSON has no Microsoft tokens"; fi
+
+          # A click link with a forged destination does not go there.
+          loc=$(curl -s -o /dev/null -w "%{redirect_url}" "$B/e/c/not-a-real-token?u=https%3A%2F%2Fevil.example%2F")
+          case "$loc" in *evil.example*) echo "::error::click link redirected to an unsigned destination"; fail=1;; *) echo "ok   forged click link -> ${loc:-none}";; esac
+
+          # Admin-only API routes refuse a signed-out caller.
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/migrate")
+          case "$code" in 307|401|403) echo "ok   /api/admin/migrate signed out ($code)";; *) echo "::error::/api/admin/migrate signed out returned $code"; fail=1;; esac
+
+          exit $fail
