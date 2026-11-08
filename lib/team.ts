@@ -22,7 +22,7 @@ export const TEAM = [
   { id: "nn", name: "Nick Nissan",        role: "Loan Associate",            initials: "NN", color: "#7a6a2a", short: "Nick",     email: "nick@mankinfinance.com",     phone: "0416 373 573",    bookingUrl: "" },
   { id: "mp", name: "Maddison Phillips",  role: "Loan Associate",            initials: "MP", color: "#7a2a5a", short: "Maddison", email: "maddison@mankinfinance.com", phone: "0466 604 223",    bookingUrl: "" },
   { id: "jp", name: "James Pham",         role: "Finance Broker",            initials: "JP", color: "#2b6e4f", short: "James",    email: "james@mankinfinance.com",    phone: "0431 693 792", bookingUrl: "" },
-  { id: "ceo", name: "Client Experience", role: "Client Experience Officer", initials: "CX", color: "#2a6a7a", short: "CX",       email: "experience@mankinfinance.com", phone: "0420 699 996", bookingUrl: "" },
+  { id: "ceo", name: "Client Experience", role: "Client Experience Officer", initials: "CX", color: "#2a6a7a", short: "CX",       email: "support@mankinfinance.com", phone: "0420 699 996", bookingUrl: "" },
 ] as const satisfies readonly TeamMember[];
 
 /** TEAM id of the default Client Experience officer. Post-settlement
