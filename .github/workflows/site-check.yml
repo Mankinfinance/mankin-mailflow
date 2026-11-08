@@ -18,7 +18,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: DNS
+      - name: DNS, asked of the domain's own name servers
+        run: |
+          # Public resolvers remember "doesn't exist" for a while; the
+          # domain's own name servers have the record the moment it's saved.
+          NS=$(dig +short NS mankinfinance.com @1.1.1.1 | head -1)
+          echo "Name servers: $(dig +short NS mankinfinance.com @1.1.1.1 | tr '\n' ' ')"
+          echo "SOA (last number = how long 'doesn't exist' is remembered, in seconds): $(dig +short SOA mankinfinance.com @1.1.1.1)"
+          for name in mail.mankinfinance.com mail.mankinfinance.com.mankinfinance.com mail.mankinfinance.com.au; do
+            echo "== $name (at $NS)"
+            dig +noall +answer +authority "$name" ANY @"$NS" | sed 's/^/   /' || true
+            echo "   CNAME: $(dig +short CNAME "$name" @"$NS" | tr '\n' ' ')  A: $(dig +short A "$name" @"$NS" | tr '\n' ' ')"
+          done
+          echo "Google public DNS: $(dig +short mail.mankinfinance.com @8.8.8.8 | tr '\n' ' ')"
+
+      - name: DNS, as the public sees it
         run: |
           for name in mail.mankinfinance.com mankin-mailflow.vercel.app; do
             echo "== $name"
