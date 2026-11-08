@@ -154,6 +154,13 @@ export async function testConnectionsAction(): Promise<
   if (!(await canAccessAdmin(broker.id))) {
     return { ok: false, error: "Admin access required to test connections." };
   }
-  const results = await runConnectionTests(liveConnectionDeps());
+  const deps = liveConnectionDeps();
+  /* The unsubscribe mailbox is read hourly for requests, so it has to
+     be reachable like a sender's. */
+  const unsubscribeMailbox = (await currentSettings()).unsubscribeMailto.trim();
+  if (unsubscribeMailbox) {
+    deps.mailboxes = [...deps.mailboxes, { name: "Unsubscribe mailbox", email: unsubscribeMailbox }];
+  }
+  const results = await runConnectionTests(deps);
   return { ok: true, results, ranAt: new Date().toISOString() };
 }

@@ -189,7 +189,7 @@ async function testGraph(deps: ConnectionDeps): Promise<ConnectionResult[]> {
   const absent = reach.filter((r) => r.status === 404);
   const errored = reach.filter((r) => r.status !== 200 && r.status !== 403 && r.status !== 404);
   const reachable = reach.filter((r) => r.status === 200);
-  const mbBase = { key: "mailboxes", label: "Broker mailboxes" };
+  const mbBase = { key: "mailboxes", label: "Mailboxes" };
   if (blocked.length + absent.length + errored.length === 0) {
     out.push(result({ ...mbBase, status: "pass", detail: `All ${reachable.length} mailboxes can be sent from.`, fix: "" }));
   } else {

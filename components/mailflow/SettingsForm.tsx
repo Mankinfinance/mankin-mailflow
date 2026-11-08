@@ -93,7 +93,7 @@ export function SettingsForm({
           hint={
             fromEnv.unsubscribeMailto
               ? "Currently coming from CAMPAIGN_UNSUBSCRIBE_MAILTO. Saving here takes over."
-              : "Optional, and only worth setting if someone reads it daily. A request that lands in an unread mailbox still counts as made."
+              : "Optional. Offered in Gmail's and Outlook's unsubscribe menu as \"email us\". Mailflow reads it every hour and puts anyone who writes to it on the register, so it must be a real mailbox (a user or a shared mailbox) that Test connections can reach."
           }
         >
           <input

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { timingSafeEqualStr } from "@/lib/constant-time";
 import { auditLog } from "@/lib/audit";
 import { reconcileBounces } from "@/lib/campaigns/reconcile-bounces";
+import { reconcileUnsubscribeMail } from "@/lib/campaigns/reconcile-unsubscribes";
 
 /**
- * Hourly bounce reconciliation.
+ * Hourly bounce reconciliation, and unsubscribe requests sent by email.
  *
  * Reads recent non-delivery reports out of the mailboxes campaigns were
  * sent from and adds the permanently dead addresses to the register. A
@@ -47,5 +48,21 @@ export async function GET(req: Request) {
     meta: { ...result, gated: Boolean(cronSecret) },
   });
 
-  return NextResponse.json({ ok: true, ...result });
+  /* Unsubscribe requests that arrived as email, on the same hourly
+     pass: the same mailboxes, the same Mail.Read permission. Its own
+     try so a failure here never hides the bounce result. */
+  let unsubscribes: Awaited<ReturnType<typeof reconcileUnsubscribeMail>> | { error: string };
+  try {
+    unsubscribes = await reconcileUnsubscribeMail();
+    await auditLog({
+      actor: { type: "system" },
+      action: "cron.unsubscribe_mail.run",
+      meta: { ...unsubscribes },
+    });
+  } catch (err) {
+    console.error("[cron] unsubscribe mail failed", err);
+    unsubscribes = { error: err instanceof Error ? err.message : String(err) };
+  }
+
+  return NextResponse.json({ ok: true, ...result, unsubscribes });
 }

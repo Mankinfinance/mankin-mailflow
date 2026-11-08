@@ -2,8 +2,9 @@ import "server-only";
 import { getGraphAppToken } from "./graph-token";
 
 /**
- * App-only Microsoft Graph mailbox read, used solely to find bounce
- * messages in a sending broker's inbox.
+ * App-only Microsoft Graph mailbox read, used to find bounce messages
+ * and unsubscribe requests in the sending mailboxes and the
+ * unsubscribe mailbox.
  *
  * Separate from outlook-app-only.ts (which sends) because this needs a
  * different application permission — **Mail.Read** alongside the
@@ -57,7 +58,7 @@ interface GraphMessage {
  * mailer-daemon" without a $search, and $search disables $filter on the
  * same query.
  */
-export async function listRecentBounceMessages(args: {
+export async function listRecentMessages(args: {
   /** Mailbox to read, e.g. the broker a campaign sent as. */
   mailbox: string;
   /** How far back to look. */
@@ -113,3 +114,6 @@ export async function listRecentBounceMessages(args: {
     receivedAt: m.receivedDateTime ? new Date(m.receivedDateTime) : new Date(),
   }));
 }
+
+/** Kept under its old name for the bounce reader. */
+export const listRecentBounceMessages = listRecentMessages;
