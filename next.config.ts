@@ -89,6 +89,19 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      {
+        /* Clickjacking: no other site may load Mailflow in a frame and
+           trick a signed-in broker into clicking. Everything except the
+           public forms, which are made to be embedded on the firm's
+           website with the <iframe> code the form editor gives out.
+           Mailflow's own previews are srcdoc frames on the same origin,
+           which "self" allows. */
+        source: "/((?!f/).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        ],
+      },
     ];
   },
 };
