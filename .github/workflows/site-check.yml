@@ -31,6 +31,16 @@ jobs:
             echo "   CNAME: $(dig +short CNAME "$name" @"$NS" | tr '\n' ' ')  A: $(dig +short A "$name" @"$NS" | tr '\n' ' ')"
           done
           echo "Google public DNS: $(dig +short mail.mankinfinance.com @8.8.8.8 | tr '\n' ' ')"
+          echo "== Other records at every name server (are they in step?)"
+          for ns in $(dig +short NS mankinfinance.com @1.1.1.1); do
+            echo "-- $ns"
+            echo "   mail CNAME:       $(dig +short CNAME mail.mankinfinance.com @"$ns" | tr '\n' ' ')"
+            echo "   selector1 CNAME:  $(dig +short CNAME selector1._domainkey.mankinfinance.com @"$ns" | tr '\n' ' ')"
+            echo "   autodiscover:     $(dig +short CNAME autodiscover.mankinfinance.com @"$ns" | tr '\n' ' ')"
+            echo "   litesrv:          $(dig +short CNAME litesrv._domainkey.mankinfinance.com @"$ns" | tr '\n' ' ')"
+            echo "   _dmarc TXT:       $(dig +short TXT _dmarc.mankinfinance.com @"$ns" | tr '\n' ' ')"
+            echo "   www:              $(dig +short www.mankinfinance.com @"$ns" | tr '\n' ' ')"
+          done
 
       - name: DNS, as the public sees it
         run: |
