@@ -195,16 +195,16 @@ async function testGraph(deps: ConnectionDeps): Promise<ConnectionResult[]> {
   } else {
     const parts = [
       blocked.length > 0 && `blocked by an access policy: ${blocked.map((r) => r.name).join(", ")}`,
-      absent.length > 0 && `no mailbox found: ${absent.map((r) => r.name).join(", ")}`,
+      absent.length > 0 && `no mailbox found for ${absent.map((r) => `${r.name} (${r.email})`).join(", ")}`,
       errored.length > 0 && `could not check: ${errored.map((r) => r.name).join(", ")}`,
     ].filter(Boolean);
     out.push(
       result({
         ...mbBase,
         status: reachable.length === 0 ? "fail" : "warn",
-        detail: `${reachable.length} of ${reach.length} reachable. ${parts.join("; ")}.`,
+        detail: `${reachable.length} of ${reach.length} reachable. ${parts.join("; ").replace(/^./, (c) => c.toUpperCase())}.`,
         fix: absent.length > 0 && blocked.length === 0
-          ? "Check the address in lib/team.ts and that the person has an Exchange Online licence. Anyone listed cannot send campaigns until fixed."
+          ? "In the Microsoft 365 admin centre, check the address is a user with an Exchange Online licence or a shared mailbox (shared mailboxes are free). An alias or group can't send. Until then, don't send campaigns from it."
           : "Add these mailboxes to the app's access policy in Exchange Online (or remove the policy), or don't send campaigns from them.",
       }),
     );
