@@ -168,8 +168,39 @@ export const AutomationNodeSchema = z.object({
 
 export type AutomationNode = z.infer<typeof AutomationNodeSchema>;
 
+/**
+ * What the sequence is for. When a contact meets it, their run stops
+ * there and counts as a success: nobody who has booked a call should
+ * get "still thinking about it?" two days later.
+ *
+ * Checked before every step, against the contact as they are now.
+ */
+export const GoalSchema = z.discriminatedUnion("kind", [
+  /** Their deal reaches one of these pipeline stages. */
+  z.object({ kind: z.literal("stage"), stageIds: z.array(z.string()).min(1) }),
+  /** Someone tags them, e.g. "booked". */
+  z.object({ kind: z.literal("tag"), tag: z.string().trim().min(1).max(60) }),
+  /** They click a link in any email of this sequence. */
+  z.object({ kind: z.literal("clicked") }),
+]);
+
+export type Goal = z.infer<typeof GoalSchema>;
+
+export function describeGoal(goal: Goal, stageLabel: (id: string) => string = (id) => id): string {
+  switch (goal.kind) {
+    case "stage":
+      return `their deal reaches ${goal.stageIds.map(stageLabel).join(" or ")}`;
+    case "tag":
+      return `they are tagged "${goal.tag}"`;
+    case "clicked":
+      return "they click a link in any email of this sequence";
+  }
+}
+
 export const AutomationFlowSchema = z.object({
   trigger: TriggerSchema,
+  /** Optional. See GoalSchema. */
+  goal: GoalSchema.optional(),
   /** Where a newly enrolled contact starts. */
   entryNodeId: z.string(),
   nodes: z.array(AutomationNodeSchema),
@@ -181,7 +212,8 @@ export const AutomationStatusSchema = z.enum(["draft", "live", "paused"]);
 export type AutomationStatus = z.infer<typeof AutomationStatusSchema>;
 
 /** A run's position in the sequence. */
-export const RunStatusSchema = z.enum(["waiting", "running", "done", "exited"]);
+/** goal: stopped early because the contact met the sequence's goal. */
+export const RunStatusSchema = z.enum(["waiting", "running", "done", "exited", "goal"]);
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
 /* -------------------------------------------------------------------------- */

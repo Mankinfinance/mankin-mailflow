@@ -12,9 +12,10 @@ import { defaultAudienceFilter, dealIdForSource } from "@/lib/campaigns/types";
 import { automationTrackingId } from "@/lib/campaigns/tracked-message";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import type { AutomationRow, AutomationRunRow } from "@/lib/db/schema";
-import { AutomationFlowSchema } from "./types";
+import { AutomationFlowSchema, describeGoal } from "./types";
 import { announceEntered, announceEnded, describeTriggerFor } from "./lifecycle";
-import { nextAction, type ContactFacts, type RunPosition } from "./engine";
+import { goalMet, nextAction, type ContactFacts, type RunPosition } from "./engine";
+import { STAGES } from "@/lib/clients/salestrekker/types";
 import { surveyLink } from "@/lib/surveys/token";
 import {
   evaluateTrigger,
@@ -89,6 +90,7 @@ function contactFactsLoader() {
         currentBalance: settlement.currentBalance,
         settlementDate: settlement.settlementDate || null,
         brokerId: settlement.brokerId,
+        stageId: "settled",
       };
     }
 
@@ -100,6 +102,7 @@ function contactFactsLoader() {
         currentBalance: null,
         settlementDate: null,
         brokerId: deal.brokerId,
+        stageId: deal.stageId,
       };
     }
 
@@ -125,6 +128,8 @@ export interface AutomationTickResult {
   sent: number;
   failed: number;
   exited: number;
+  /** Stopped early on reaching the sequence's goal. */
+  reachedGoal: number;
 }
 
 export async function tickAutomations(
@@ -137,6 +142,7 @@ export async function tickAutomations(
     sent: 0,
     failed: 0,
     exited: 0,
+    reachedGoal: 0,
   };
 
   const live = await repos().automation.list({ statuses: ["live"] });
@@ -166,6 +172,7 @@ export async function tickAutomations(
     result.sent += outcome.sent;
     result.failed += outcome.failed;
     result.exited += outcome.exited;
+    result.reachedGoal += outcome.reachedGoal;
   }
 
   await auditLog({
@@ -308,6 +315,8 @@ interface AdvanceOutcome {
   sent: number;
   failed: number;
   exited: number;
+  /** Stopped because the contact met the sequence's goal. */
+  reachedGoal: number;
 }
 
 /** Apply exactly one engine decision to one run. */
@@ -317,7 +326,7 @@ async function advanceRun(
   now: Date,
   factsFor: (email: string) => Promise<ContactFacts | null>,
 ): Promise<AdvanceOutcome> {
-  const outcome: AdvanceOutcome = { sent: 0, failed: 0, exited: 0 };
+  const outcome: AdvanceOutcome = { sent: 0, failed: 0, exited: 0, reachedGoal: 0 };
 
   const parsed = AutomationFlowSchema.safeParse(automation.flow);
   if (!parsed.success) {
@@ -345,6 +354,34 @@ async function advanceRun(
     await announceEnded({ automation, run, now, ending: { kind: "unsubscribed" } });
     outcome.exited += 1;
     return outcome;
+  }
+
+  /* The goal, before anything else is sent. Someone who has booked,
+     been tagged, or reached the stage the sequence was nudging towards
+     stops here, and it counts as the sequence working. */
+  if (flow.goal) {
+    const clickedInRun =
+      flow.goal.kind === "clicked" &&
+      (await repos().automation.sendsForEmail(run.email)).some(
+        (s) => s.runId === run.id && s.clickedAt !== null,
+      );
+    const facts = flow.goal.kind === "clicked" ? null : await factsFor(run.email);
+    if (goalMet(flow.goal, facts, clickedInRun)) {
+      await repos().automation.updateRun(run.id, {
+        status: "goal",
+        error: null,
+        finishedAt: now,
+      });
+      const stageLabel = (id: string) => STAGES.find((x) => x.id === id)?.shortLabel ?? id;
+      await announceEnded({
+        automation,
+        run,
+        now,
+        ending: { kind: "goal", description: describeGoal(flow.goal, stageLabel) },
+      });
+      outcome.reachedGoal += 1;
+      return outcome;
+    }
   }
 
   const lastSend = await repos().automation.latestSendForRun(run.id);

@@ -8,8 +8,11 @@ import { auditLog } from "@/lib/audit";
 import {
   AUTOMATION_TEMPLATES,
   AutomationFlowSchema,
+  GoalSchema,
   emptyFlow,
+  type Goal,
 } from "@/lib/automations/types";
+import { STAGES } from "@/lib/clients/salestrekker/types";
 import { validateFlow } from "@/lib/automations/engine";
 import { applyStepEdit, type StepPatch } from "@/lib/automations/edit";
 
@@ -248,6 +251,51 @@ export async function updateAutomationStepAction(
     actor: { type: "broker", id: auth.brokerId },
     action: "automation.edit-step",
     meta: { automationId: id, nodeId, fields: Object.keys(patch) },
+  });
+  revalidatePath(`/marketing/automations/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Set or clear a sequence's goal. Allowed while live: a goal only ever
+ * stops someone early, so adding one can't send anybody an email they
+ * wouldn't otherwise have had. It takes effect at each person's next
+ * step.
+ */
+export async function setAutomationGoalAction(
+  id: string,
+  goal: Goal | null,
+): Promise<Result> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const automation = await repos().automation.get(id);
+  if (!automation) return { ok: false, error: "Sequence not found." };
+  const parsed = AutomationFlowSchema.safeParse(automation.flow);
+  if (!parsed.success) return { ok: false, error: "This sequence could not be read." };
+
+  let next: Goal | undefined;
+  if (goal) {
+    const checked = GoalSchema.safeParse(goal);
+    if (!checked.success) return { ok: false, error: "That goal isn't complete." };
+    next = checked.data;
+    if (next.kind === "stage") {
+      const known = new Set(STAGES.map((s) => s.id as string));
+      const stageIds = [...new Set(next.stageIds)].filter((s) => known.has(s));
+      if (stageIds.length === 0) return { ok: false, error: "Pick at least one stage." };
+      next = { kind: "stage", stageIds };
+    }
+  }
+
+  const { goal: _previous, ...rest } = parsed.data;
+  void _previous;
+  await repos().automation.update(id, {
+    flow: next ? { ...rest, goal: next } : rest,
+  });
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "automation.set-goal",
+    meta: { automationId: id, goal: next ?? null, previous: parsed.data.goal ?? null },
   });
   revalidatePath(`/marketing/automations/${id}`);
   return { ok: true };

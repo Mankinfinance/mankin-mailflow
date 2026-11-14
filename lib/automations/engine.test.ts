@@ -3,6 +3,7 @@ import {
   addDays,
   dataConditionAnswer,
   describeCondition,
+  goalMet,
   nextAction,
   reachableNodes,
   splitSide,
@@ -731,5 +732,36 @@ describe("a split's arms are part of the sequence", () => {
       ],
     };
     expect(validateFlow(flow).some((p) => /split points at/.test(p))).toBe(true);
+  });
+});
+
+describe("goalMet", () => {
+  const facts = (over: Partial<ContactFacts> = {}): ContactFacts => ({
+    tags: [],
+    lenderCode: null,
+    currentBalance: null,
+    settlementDate: null,
+    brokerId: null,
+    stageId: null,
+    ...over,
+  });
+
+  it("meets a stage goal when the deal is at one of the chosen stages", () => {
+    const goal = { kind: "stage" as const, stageIds: ["lodged", "cond-approved"] };
+    expect(goalMet(goal, facts({ stageId: "lodged" }), false)).toBe(true);
+    expect(goalMet(goal, facts({ stageId: "pre-lodge" }), false)).toBe(false);
+    expect(goalMet(goal, null, false)).toBe(false);
+  });
+
+  it("meets a tag goal regardless of the tag's case", () => {
+    const goal = { kind: "tag" as const, tag: "Booked" };
+    expect(goalMet(goal, facts({ tags: ["booked"] }), false)).toBe(true);
+    expect(goalMet(goal, facts({ tags: ["vip"] }), false)).toBe(false);
+  });
+
+  it("meets a click goal only on a click in this run", () => {
+    const goal = { kind: "clicked" as const };
+    expect(goalMet(goal, null, true)).toBe(true);
+    expect(goalMet(goal, facts({ tags: ["booked"] }), false)).toBe(false);
   });
 });

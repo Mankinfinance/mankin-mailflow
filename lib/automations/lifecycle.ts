@@ -43,7 +43,9 @@ export type RunEnding =
   /** Opted out mid-sequence. The sender checks before every step. */
   | { kind: "unsubscribed" }
   /** The sequence itself could not run. */
-  | { kind: "broken"; error: string };
+  | { kind: "broken"; error: string }
+  /** Met the sequence's goal, so it stopped early: a success. */
+  | { kind: "goal"; description: string };
 
 /**
  * Endpoints subscribe per event, so the split has to match how people
@@ -53,7 +55,7 @@ export type RunEnding =
 export function endingEvent(
   ending: RunEnding,
 ): "automation.completed" | "automation.exited" {
-  return ending.kind === "finished"
+  return ending.kind === "finished" || ending.kind === "goal"
     ? "automation.completed"
     : "automation.exited";
 }
@@ -130,6 +132,14 @@ export function endedPayload(args: {
          the same sequence, and not the same news. */
       endNodeId: ending.nodeId,
       outcome: ending.note,
+    };
+  }
+  if (ending.kind === "goal") {
+    return {
+      ...common,
+      endNodeId: null,
+      outcome: `Reached the goal: ${ending.description}.`,
+      goalReached: true,
     };
   }
   return {

@@ -6,7 +6,8 @@ import { databaseConfig } from "@/lib/db/state";
 import { listSettlements } from "@/lib/settlements-store";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { buildSubscribers, countSubscribers } from "@/lib/campaigns/subscribers";
-import { AutomationFlowSchema } from "@/lib/automations/types";
+import { AutomationFlowSchema, describeGoal } from "@/lib/automations/types";
+import { STAGES } from "@/lib/clients/salestrekker/types";
 import { describeTriggerFor } from "@/lib/automations/lifecycle";
 import { SurveyConfigSchema } from "@/lib/surveys/types";
 import { summariseNps, describeNps } from "@/lib/surveys/scoring";
@@ -292,6 +293,13 @@ export const TOOLS = {
               waiting: tally("waiting"),
               finished: tally("done"),
               stopped: tally("exited"),
+              reachedGoal: tally("goal"),
+              goal: parsed.success && parsed.data.goal
+                ? describeGoal(
+                    parsed.data.goal,
+                    (id) => STAGES.find((x) => x.id === id)?.shortLabel ?? id,
+                  )
+                : null,
             };
           }),
         ),

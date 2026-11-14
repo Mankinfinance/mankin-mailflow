@@ -31,6 +31,14 @@ describe("endingEvent", () => {
     expect(endingEvent({ kind: "unsubscribed" })).toBe("automation.exited");
     expect(endingEvent({ kind: "broken", error: "x" })).toBe("automation.exited");
   });
+
+  it("calls reaching the goal a completion, and says so", () => {
+    const ending = { kind: "goal" as const, description: 'they are tagged "booked"' };
+    expect(endingEvent(ending)).toBe("automation.completed");
+    const payload = endedPayload({ automation, run: run(), ending, now: new Date() });
+    expect(payload.goalReached).toBe(true);
+    expect(payload.outcome).toBe('Reached the goal: they are tagged "booked".');
+  });
 });
 
 describe("enteredPayload", () => {

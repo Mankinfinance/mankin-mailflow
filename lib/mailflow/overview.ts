@@ -36,10 +36,10 @@ export function buildAutomationOverview(input: {
   return {
     live: input.automations.filter((a) => a.status === "live").length,
     inProgress: input.runs.filter((r) => r.status === "waiting").length,
-    // "done" and "exited" are both finished; exited means they opted out
-    // partway, which still counts as no longer in progress.
+    // "done", "exited" and "goal" are all finished: exited means they opted
+    // out partway, goal means they reached the sequence's goal early.
     completed: input.runs.filter(
-      (r) => r.status === "done" || r.status === "exited",
+      (r) => r.status === "done" || r.status === "exited" || r.status === "goal",
     ).length,
     sentInWindow: input.sends.filter(
       (s) => s.sentAt !== null && s.sentAt >= input.since,

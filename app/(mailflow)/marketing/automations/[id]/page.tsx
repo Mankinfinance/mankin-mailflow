@@ -6,6 +6,7 @@ import { AutomationEditor } from "@/components/mailflow/AutomationEditor";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import { AutomationControls } from "@/components/mailflow/AutomationControls";
 import { TriggerTargetPicker } from "@/components/mailflow/TriggerTargetPicker";
+import { GoalPicker } from "@/components/mailflow/GoalPicker";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { repos } from "@/lib/db/repos";
 import { TEAM, teamMember } from "@/lib/team";
@@ -27,10 +28,11 @@ export default async function AutomationPage({
   if (!automation) notFound();
 
   const parsed = AutomationFlowSchema.safeParse(automation.flow);
-  const [stats, runs, settings] = await Promise.all([
+  const [stats, runs, settings, tagCounts] = await Promise.all([
     repos().automation.nodeStats(automation.id),
     repos().automation.listRuns(automation.id, { limit: 5000 }),
     currentSettings(),
+    repos().contactTag.counts(),
   ]);
 
   /* A signup trigger stores the form's id; the card has to name it.
@@ -67,7 +69,7 @@ export default async function AutomationPage({
               tags: [],
             };
           }
-          return { kind, forms: [], tags: await repos().contactTag.counts() };
+          return { kind, forms: [], tags: tagCounts };
         })()
       : null;
 
@@ -85,6 +87,7 @@ export default async function AutomationPage({
   startOfMonth.setHours(0, 0, 0, 0);
   const enteredThisMonth = runs.filter((r) => r.enteredAt >= startOfMonth).length;
   const inFlight = runs.filter((r) => r.status === "waiting").length;
+  const reachedGoal = runs.filter((r) => r.status === "goal").length;
 
   const stageLabels = Object.fromEntries(STAGES.map((s) => [s.id, s.shortLabel]));
   const problems = parsed.success ? validateFlow(parsed.data) : [];
@@ -155,6 +158,16 @@ export default async function AutomationPage({
               forms={picks.forms}
               tags={picks.tags}
               locked={automation.status === "live"}
+            />
+          )}
+
+          {parsed.success && (
+            <GoalPicker
+              automationId={automation.id}
+              current={parsed.data.goal ?? null}
+              stages={STAGES.map((s) => ({ id: s.id, label: s.shortLabel }))}
+              tags={tagCounts}
+              reached={reachedGoal}
             />
           )}
 

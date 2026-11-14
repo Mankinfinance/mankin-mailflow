@@ -40,6 +40,7 @@ vi.mock("@/lib/clients/salestrekker", () => ({
 const { tickAutomations } = await import("./runner");
 const { repos } = await import("@/lib/db/repos");
 const { AUTOMATION_TEMPLATES } = await import("./types");
+type Goal = import("./types").Goal;
 
 const NOW = new Date("2026-08-25T09:00:00");
 
@@ -48,11 +49,11 @@ beforeAll(() => {
   process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 });
 
-async function liveAnnualReview() {
+async function liveAnnualReview(goal?: Goal) {
   const automation = await repos().automation.create({
     name: "Annual review",
     status: "live",
-    flow: AUTOMATION_TEMPLATES[0].flow,
+    flow: goal ? { ...AUTOMATION_TEMPLATES[0].flow, goal } : AUTOMATION_TEMPLATES[0].flow,
     fromBrokerId: "mm",
     createdBy: "mm",
   });
@@ -68,6 +69,7 @@ beforeEach(async () => {
   for (const s of await repos().campaign.listSuppressions()) {
     await repos().campaign.unsuppress(s.email);
   }
+  await repos().contactTag.removeTagEntirely("booked");
 });
 
 describe("tickAutomations", () => {
@@ -197,5 +199,60 @@ describe("tickAutomations", () => {
     const result = await tickAutomations(NOW);
 
     expect(result.enrolled).toBe(0);
+  });
+
+  it("stops at the goal once they click, and sends nothing more", async () => {
+    const automation = await liveAnnualReview({ kind: "clicked" });
+    await tickAutomations(NOW);
+
+    const send = await repos().automation.findSend(automation.id, "sarah@example.com");
+    await repos().automation.updateSend(send!.id, {
+      clickedAt: new Date(NOW.getTime() + 3_600_000),
+    });
+    sendMock.mockClear();
+
+    const later = new Date(NOW.getTime() + 6 * 86_400_000);
+    const result = await tickAutomations(later);
+
+    expect(result.reachedGoal).toBe(1);
+    expect(sendMock).not.toHaveBeenCalled();
+    const runs = await repos().automation.listRuns(automation.id);
+    expect(runs[0].status).toBe("goal");
+    expect(runs[0].finishedAt).toEqual(later);
+  });
+
+  it("stops at the goal when they're tagged partway through", async () => {
+    const automation = await liveAnnualReview({ kind: "tag", tag: "booked" });
+    await tickAutomations(NOW);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+
+    await repos().contactTag.add(["sarah@example.com"], "booked", "mm");
+    sendMock.mockClear();
+
+    let later = new Date(NOW.getTime() + 6 * 86_400_000);
+    for (let i = 0; i < 3; i++) {
+      await tickAutomations(later);
+      later = new Date(later.getTime() + 60_000);
+    }
+
+    expect(sendMock).not.toHaveBeenCalled();
+    const runs = await repos().automation.listRuns(automation.id);
+    expect(runs[0].status).toBe("goal");
+  });
+
+  it("carries on as normal while the goal isn't met", async () => {
+    const automation = await liveAnnualReview({ kind: "tag", tag: "booked" });
+    await tickAutomations(NOW);
+    sendMock.mockClear();
+
+    let later = new Date(NOW.getTime() + 6 * 86_400_000);
+    for (let i = 0; i < 4; i++) {
+      await tickAutomations(later);
+      later = new Date(later.getTime() + 60_000);
+    }
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const runs = await repos().automation.listRuns(automation.id);
+    expect(runs[0].status).toBe("done");
   });
 });

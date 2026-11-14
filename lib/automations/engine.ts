@@ -1,4 +1,4 @@
-import type { AutomationFlow, AutomationNode, DataCondition } from "./types";
+import type { AutomationFlow, AutomationNode, DataCondition, Goal } from "./types";
 
 /**
  * The automation engine: given a flow, where a contact is up to, and the
@@ -25,6 +25,28 @@ export interface ContactFacts {
   /** ISO yyyy-mm-dd, or null for a pipeline contact with no settlement. */
   settlementDate: string | null;
   brokerId: string | null;
+  /** Pipeline stage of their deal; "settled" for a back-book contact.
+   *  Optional so facts built before goals existed still type-check. */
+  stageId?: string | null;
+}
+
+/**
+ * Has this contact met the sequence's goal? `clickedInRun` is whether
+ * they clicked any email of this run; facts are as they are now.
+ */
+export function goalMet(
+  goal: Goal,
+  facts: ContactFacts | null,
+  clickedInRun: boolean,
+): boolean {
+  switch (goal.kind) {
+    case "clicked":
+      return clickedInRun;
+    case "tag":
+      return Boolean(facts?.tags.includes(goal.tag.trim().toLowerCase()));
+    case "stage":
+      return Boolean(facts?.stageId && goal.stageIds.includes(facts.stageId));
+  }
 }
 
 export interface RunPosition {
