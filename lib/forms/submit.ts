@@ -5,6 +5,7 @@ import { auditLog } from "@/lib/audit";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import type { Deal } from "@/lib/clients/salestrekker/types";
 import { FormConfigSchema, type FormConfig } from "./types";
+import { consentFor, sendConfirmation } from "./consent";
 import { PageConfigSchema } from "@/lib/sites/types";
 import type { FormRow } from "@/lib/db/schema";
 
@@ -31,6 +32,8 @@ export interface SubmissionInput {
    *  unverified value straight off a public request — `submitForm`
    *  checks it before recording anything. */
   pageId?: string | null;
+  /** Ticked the marketing box, when the form shows one. */
+  marketingOptIn?: boolean;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -176,8 +179,12 @@ export async function submitForm(
     return { ok: true, thanks: config.thanks, dealRef: null };
   }
 
+  const consent = consentFor(config, input.marketingOptIn === true, Boolean(input.email.trim()));
+
   // Record the enquiry before anything can fail.
   const submission = await repos().form.addSubmission({
+    consentStatus: consent.status,
+    consentText: consent.text,
     formId: form.id,
     pageId: await resolvePageAttribution(input.pageId, form.id),
     name: input.name.trim(),
@@ -193,6 +200,12 @@ export async function submitForm(
      whatever is listening even when deal creation fails — that is
      precisely the case where somebody needs to pick up the phone
      manually. `dealRef` is filled in afterwards when there is one. */
+  /* Double opt-in: the link goes out now, before the CRM work, so the
+     person gets it while they're still looking at their inbox. */
+  if (consent.sendConfirmation) {
+    await sendConfirmation({ submission, config, formId: form.id });
+  }
+
   async function announce(dealRef: string | null, dealError: string | null) {
     await emitWebhook("form.submitted", {
       formId: form.id,
@@ -203,6 +216,9 @@ export async function submitForm(
       phone: submission.phone,
       answers: input.answers,
       pageId: submission.pageId,
+      /* What they agreed to: "enquiry", "declined", "opted-in" or
+         "pending" (a confirmation email is on its way). */
+      marketingConsent: submission.consentStatus,
       dealRef,
       /* Named rather than hidden: a receiver that sees a lead with no
          deal reference should know whether that was the form's design

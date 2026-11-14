@@ -1,4 +1,5 @@
 import type { Deal } from "@/lib/clients/salestrekker/types";
+import { consentAllowsMarketing } from "@/lib/forms/types";
 import type { SettlementRow } from "@/lib/commission-parser";
 import type { Trigger } from "./types";
 
@@ -75,6 +76,9 @@ export interface SubmissionHit {
   submittedAt: Date;
   /** The deal it became, when the form routes to the pipeline. */
   dealId: string | null;
+  /** The consent record (see form_submissions.consent_status). Absent
+   *  is treated as "enquiry", as it was before forms could ask. */
+  consentStatus?: string;
 }
 
 /** A label applied to a contact, for the tag trigger. */
@@ -118,6 +122,10 @@ export function evaluateTrigger(input: EvaluateTriggerInput): TriggerHit[] {
        picked up twice. */
     for (const sub of input.submissions ?? []) {
       if (sub.formId !== trigger.formId) continue;
+      /* The form asked about marketing and they said no, or haven't
+         confirmed by email yet. A pending one is picked up on a later
+         tick once they confirm, since it was never enrolled. */
+      if (!consentAllowsMarketing(sub.consentStatus)) continue;
       const email = sub.email.trim().toLowerCase();
       if (!eligible(email)) continue;
 

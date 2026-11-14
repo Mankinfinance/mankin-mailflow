@@ -509,6 +509,8 @@ export interface FormRepo {
   recordView(id: string): Promise<void>;
 
   addSubmission(row: NewFormSubmission): Promise<FormSubmissionRow>;
+  /** One enquiry by id (double opt-in confirmation). */
+  getSubmission(id: string): Promise<FormSubmissionRow | null>;
   updateSubmission(
     id: string,
     patch: Partial<NewFormSubmission>,
@@ -866,7 +868,10 @@ async function ensureFormTables(db: ReturnType<typeof getDb>): Promise<void> {
     "deal_id" text,
     "error" text,
     "ip_address" text,
-    "user_agent" text
+    "user_agent" text,
+    "consent_status" text DEFAULT 'enquiry' NOT NULL,
+    "consent_text" text,
+    "confirmed_at" timestamp with time zone
   )`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS "forms_status_idx" ON "forms" ("status")`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS "forms_type_idx" ON "forms" ("type")`);
@@ -2575,6 +2580,21 @@ function realRepos(): RepoBundle {
           await ensureFormTables(db);
           const [inserted] = await doInsert();
           return inserted;
+        }
+      },
+      async getSubmission(id) {
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(formSubmissions)
+            .where(eq(formSubmissions.id, id))
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
         }
       },
       async updateSubmission(id, patch) {
@@ -4325,9 +4345,15 @@ function mockRepos(): RepoBundle {
           error: row.error ?? null,
           ipAddress: row.ipAddress ?? null,
           userAgent: row.userAgent ?? null,
+          consentStatus: row.consentStatus ?? "enquiry",
+          consentText: row.consentText ?? null,
+          confirmedAt: row.confirmedAt ?? null,
         };
         mockSubmissionStore.set(id, submission);
         return submission;
+      },
+      async getSubmission(id) {
+        return mockSubmissionStore.get(id) ?? null;
       },
       async updateSubmission(id, patch) {
         const existing = mockSubmissionStore.get(id);

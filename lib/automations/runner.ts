@@ -220,6 +220,7 @@ async function enrol(
               name: r.name,
               submittedAt: r.submittedAt,
               dealId: r.dealId,
+              consentStatus: r.consentStatus,
             },
           ]
         : [],

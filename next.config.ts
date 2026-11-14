@@ -97,10 +97,15 @@ const nextConfig: NextConfig = {
            Mailflow's own previews are srcdoc frames on the same origin,
            which "self" allows. */
         source: "/((?!f/).*)",
-        headers: [
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
-        ],
+        headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
+      },
+      {
+        /* Same, as CSP. Not on the two public pages that send a stricter
+           policy of their own (the web version of an email and the
+           opt-in confirmation): a header set here replaces the route's,
+           and theirs already says frame-ancestors 'none'. */
+        source: "/((?!f/|e/v/|e/confirm/).*)",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }],
       },
     ];
   },

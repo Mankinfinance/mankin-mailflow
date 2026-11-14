@@ -60,6 +60,35 @@ export const FormDestinationSchema = z.discriminatedUnion("kind", [
 ]);
 export type FormDestination = z.infer<typeof FormDestinationSchema>;
 
+export const DEFAULT_MARKETING_LABEL =
+  "Send me occasional emails with rate news and tips. I can unsubscribe any time.";
+
+/**
+ * Asking for permission to send marketing, separately from the enquiry.
+ *
+ * Filling in an enquiry form is consent to be contacted about that
+ * enquiry. Newsletters and sequences are a different thing, and the
+ * cleanest evidence of consent to them is a box the person ticks
+ * themselves: never pre-ticked. Double opt-in goes one step further and
+ * proves the address is theirs, by emailing a link they have to click.
+ *
+ * Only affects sequences that start from this form: a "declined" or
+ * still-"pending" enquiry doesn't enter them. The enquiry itself, and
+ * any deal it creates, happen either way.
+ */
+export const MarketingConsentSchema = z.object({
+  /** Show the tick box. */
+  ask: z.boolean().default(false),
+  label: z
+    .string()
+    .trim()
+    .max(300)
+    .default(DEFAULT_MARKETING_LABEL),
+  /** Email a confirmation link before treating the tick as consent. */
+  doubleOptIn: z.boolean().default(false),
+});
+export type MarketingConsent = z.infer<typeof MarketingConsentSchema>;
+
 export const FormConfigSchema = z.object({
   headline: z.string().default("Talk to a broker"),
   blurb: z.string().default(""),
@@ -74,9 +103,28 @@ export const FormConfigSchema = z.object({
       "By sending this you agree we can contact you about your enquiry.",
     ),
   destination: FormDestinationSchema,
+  /** Optional. See MarketingConsentSchema. Absent on older forms. */
+  marketing: MarketingConsentSchema.optional(),
 });
 
 export type FormConfig = z.infer<typeof FormConfigSchema>;
+
+
+
+export type ConsentStatus = "enquiry" | "declined" | "opted-in" | "pending" | "confirmed";
+
+/** Whether an enquiry with this consent may enter a marketing sequence. */
+export function consentAllowsMarketing(status: string | null | undefined): boolean {
+  return status !== "declined" && status !== "pending";
+}
+
+export const CONSENT_LABELS: Record<ConsentStatus, string> = {
+  enquiry: "Agreed to be contacted about the enquiry",
+  declined: "Didn't tick the marketing box",
+  "opted-in": "Ticked the marketing box",
+  pending: "Ticked the box; hasn't confirmed by email yet",
+  confirmed: "Ticked the box and confirmed by email",
+};
 
 export const FormStatusSchema = z.enum(["draft", "live", "paused"]);
 export type FormStatus = z.infer<typeof FormStatusSchema>;

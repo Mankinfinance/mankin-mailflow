@@ -1270,6 +1270,25 @@ export const formSubmissions = pgTable(
 
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+
+    /**
+     * The consent record. What the person was shown and what they did,
+     * kept with the enquiry so "how did we get this address, and what
+     * did they agree to?" has an answer years later.
+     *
+     *   enquiry   - the form didn't ask about marketing; they agreed to
+     *               be contacted about this enquiry
+     *   declined  - the form asked, and they left the box unticked
+     *   opted-in  - they ticked the box (single opt-in)
+     *   pending   - they ticked it and haven't clicked the confirmation
+     *               email yet (double opt-in)
+     *   confirmed - they ticked it and clicked the confirmation email
+     */
+    consentStatus: text("consent_status").notNull().default("enquiry"),
+    /** The exact wording beside the button, and beside the box if any. */
+    consentText: text("consent_text"),
+    /** When they clicked the confirmation email, for double opt-in. */
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   },
   (t) => [
     index("form_submissions_form_idx").on(t.formId),

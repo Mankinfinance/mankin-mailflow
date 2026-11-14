@@ -37,8 +37,11 @@ export interface MimeSendInput {
    * One-click unsubscribe endpoint (https). Receives the POST that
    * Gmail and Yahoo send when someone uses the unsubscribe button in
    * the mail client's own chrome.
+   *
+   * Omitted only for a transactional message (a double opt-in
+   * confirmation), which then goes without the bulk-mail headers.
    */
-  unsubscribeUrl: string;
+  unsubscribeUrl?: string;
   /** Mailbox that accepts unsubscribe requests, as the fallback URI. */
   unsubscribeMailto?: string;
 }
@@ -116,14 +119,16 @@ function messageId(fromEmail: string): string {
 export function buildMimeMessage(input: MimeSendInput): string {
   const boundary = `--mankin-${crypto.randomUUID()}`;
 
-  const unsubscribeUris = [
-    `<${assertHeaderSafe("unsubscribe URL", input.unsubscribeUrl)}>`,
-  ];
-  if (input.unsubscribeMailto) {
-    unsubscribeUris.push(
-      `<mailto:${assertHeaderSafe("unsubscribe mailbox", input.unsubscribeMailto)}>`,
-    );
+  const unsubscribeUris: string[] = [];
+  if (input.unsubscribeUrl) {
+    unsubscribeUris.push(`<${assertHeaderSafe("unsubscribe URL", input.unsubscribeUrl)}>`);
+    if (input.unsubscribeMailto) {
+      unsubscribeUris.push(
+        `<mailto:${assertHeaderSafe("unsubscribe mailbox", input.unsubscribeMailto)}>`,
+      );
+    }
   }
+  const bulk = unsubscribeUris.length > 0;
 
   const headers = [
     `From: ${formatAddress(input.fromName, input.fromEmail)}`,
@@ -134,11 +139,15 @@ export function buildMimeMessage(input: MimeSendInput): string {
     `MIME-Version: 1.0`,
     // The pair Gmail and Yahoo require on bulk mail. The POST target
     // must unsubscribe without any further interaction (RFC 8058).
-    `List-Unsubscribe: ${unsubscribeUris.join(", ")}`,
-    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
     // Tells well-behaved autoresponders not to reply, and marks the
     // message honestly as bulk rather than personal correspondence.
-    `Precedence: bulk`,
+    ...(bulk
+      ? [
+          `List-Unsubscribe: ${unsubscribeUris.join(", ")}`,
+          `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
+          `Precedence: bulk`,
+        ]
+      : []),
     `Auto-Submitted: auto-generated`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ];

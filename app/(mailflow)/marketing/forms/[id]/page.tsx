@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { CONSENT_LABELS, type ConsentStatus } from "@/lib/forms/types";
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import {
@@ -88,6 +89,7 @@ export default async function FormPage({
                     <Th>Name</Th>
                     <Th>Contact</Th>
                     <Th>Became</Th>
+                    <Th>Permission</Th>
                     <Th align="right">When</Th>
                   </tr>
                 </thead>
@@ -116,6 +118,11 @@ export default async function FormPage({
                         ) : (
                           <span className="text-ink-mute">Enquiry record</span>
                         )}
+                      </td>
+                      <td className="px-3.5 py-2 text-[11.5px] text-ink-mute">
+                        <span title={s.consentText ?? undefined}>
+                          {CONSENT_LABELS[s.consentStatus as ConsentStatus] ?? s.consentStatus}
+                        </span>
                       </td>
                       <td className="px-3.5 py-2 text-right text-[11.5px] tabular-nums text-ink-mute">
                         {s.submittedAt.toLocaleDateString("en-AU", {

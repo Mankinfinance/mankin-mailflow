@@ -11,7 +11,16 @@ vi.mock("@/lib/clients/salestrekker", () => ({
   }),
 }));
 
+const sendMock = vi.fn();
+vi.mock("@/lib/clients/outlook-mime", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/clients/outlook-mime")>(
+    "@/lib/clients/outlook-mime",
+  );
+  return { ...actual, sendMimeViaGraph: (...a: unknown[]) => sendMock(...a) };
+});
+
 const { submitForm, resolvePageAttribution } = await import("./submit");
+const { confirmByToken, findConfirmable } = await import("./consent");
 const { repos } = await import("@/lib/db/repos");
 
 function config(over: Record<string, unknown> = {}) {
@@ -357,5 +366,101 @@ describe("address validation at the public boundary", () => {
         config(),
       ),
     ).toMatch(/does not look right/);
+  });
+});
+
+describe("consent and double opt-in", () => {
+  beforeEach(async () => {
+    process.env.AUTH_SECRET = "test-secret";
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
+    sendMock.mockReset();
+    sendMock.mockResolvedValue({ ok: true, mode: "mock" });
+    for (const f of await repos().form.list()) {
+      await repos().form.remove(f.id);
+    }
+  });
+
+  const marketing = (doubleOptIn: boolean) => ({
+    marketing: { ask: true, label: "Send me rate news.", doubleOptIn },
+  });
+
+  async function formWith(over: Record<string, unknown>) {
+    return repos().form.create({
+      name: "Rate news",
+      type: "embedded",
+      status: "live",
+      config: config(over),
+      createdBy: "mm",
+    });
+  }
+
+  it("records an enquiry-only consent when the form doesn't ask", async () => {
+    const form = await formWith({});
+    await submitForm(form, input());
+    const [sub] = await repos().form.listSubmissions(form.id);
+    expect(sub.consentStatus).toBe("enquiry");
+    expect(sub.consentText).toContain("contact you about your enquiry");
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("records the wording and an unticked box as declined", async () => {
+    const form = await formWith(marketing(false));
+    await submitForm(form, input());
+    const [sub] = await repos().form.listSubmissions(form.id);
+    expect(sub.consentStatus).toBe("declined");
+    expect(sub.consentText).toContain("[ ] Send me rate news.");
+  });
+
+  it("records a tick as opted in on a single opt-in form", async () => {
+    const form = await formWith(marketing(false));
+    await submitForm(form, input({ marketingOptIn: true }));
+    const [sub] = await repos().form.listSubmissions(form.id);
+    expect(sub.consentStatus).toBe("opted-in");
+    expect(sub.consentText).toContain("[x] Send me rate news.");
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("emails a confirmation link on a double opt-in form, and the link confirms", async () => {
+    const form = await formWith(marketing(true));
+    await submitForm(form, input({ marketingOptIn: true }));
+    const [sub] = await repos().form.listSubmissions(form.id);
+    expect(sub.consentStatus).toBe("pending");
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const mail = sendMock.mock.calls[0][0];
+    expect(mail.to).toBe("sarah@example.com");
+    expect(mail.fromEmail).toBe("michael@mankinfinance.com");
+    // Transactional: no bulk-mail unsubscribe header.
+    expect(mail.unsubscribeUrl).toBeUndefined();
+    const token = /\/e\/confirm\/([^"\s<]+)/.exec(mail.text)![1];
+
+    // Looking at the page changes nothing (link scanners do this).
+    const looked = await findConfirmable(token);
+    expect("submission" in looked).toBe(true);
+    expect((await repos().form.getSubmission(sub.id))!.consentStatus).toBe("pending");
+
+    expect(await confirmByToken(token)).toEqual({ ok: true, already: false });
+    const after = (await repos().form.getSubmission(sub.id))!;
+    expect(after.consentStatus).toBe("confirmed");
+    expect(after.confirmedAt).toBeInstanceOf(Date);
+
+    expect(await confirmByToken(token)).toEqual({ ok: true, already: true });
+  });
+
+  it("refuses a tampered or wrong-purpose token", async () => {
+    expect(await confirmByToken("not-a-token")).toEqual({ ok: false, reason: "invalid" });
+    const { issueTrackingToken } = await import("@/lib/campaigns/tracking");
+    const unsub = await issueTrackingToken({ cid: "form:x", em: "sarah@example.com", p: "unsubscribe" });
+    expect(await confirmByToken(unsub)).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it("won't turn a declined enquiry into consent", async () => {
+    const form = await formWith(marketing(true));
+    await submitForm(form, input());
+    const [sub] = await repos().form.listSubmissions(form.id);
+    const { issueTrackingToken } = await import("@/lib/campaigns/tracking");
+    const forged = await issueTrackingToken({ cid: `form:${sub.id}`, em: sub.email, p: "confirm" });
+    expect(await confirmByToken(forged)).toEqual({ ok: false, reason: "invalid" });
+    expect((await repos().form.getSubmission(sub.id))!.consentStatus).toBe("declined");
   });
 });

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy } from "lucide-react";
 import {
+  DEFAULT_MARKETING_LABEL,
   FIELD_LABELS,
   FORM_TYPE_LABELS,
   type FormConfig,
@@ -249,6 +250,75 @@ export function FormEditor({ form, brokers, stages, appUrl }: FormEditorProps) {
               sending — keep it accurate rather than short.
             </p>
           </div>
+        </Card>
+
+        <Card>
+          <Eyebrow className="mb-1">Permission to email</Eyebrow>
+          <p className="mb-2.5 text-[11.5px] text-ink-mute">
+            Sending an enquiry is permission to reply about it. Newsletters and
+            sequences need more: a box they tick themselves. Every enquiry
+            keeps a record of the wording they saw and what they chose.
+          </p>
+          <label className="flex items-start gap-2 text-[12px] text-ink">
+            <input
+              type="checkbox"
+              checked={config.marketing?.ask ?? false}
+              onChange={(e) =>
+                patch({
+                  marketing: {
+                    label: config.marketing?.label || DEFAULT_MARKETING_LABEL,
+                    doubleOptIn: config.marketing?.doubleOptIn ?? false,
+                    ask: e.target.checked,
+                  },
+                })
+              }
+              className="mt-[2px] h-4 w-4"
+            />
+            <span>
+              Ask for permission to send marketing
+              <span className="block text-[10.5px] text-ink-mute">
+                Adds an unticked box. Sequences that start from this form only
+                take people who ticked it.
+              </span>
+            </span>
+          </label>
+
+          {config.marketing?.ask && (
+            <>
+              <div className="mt-3">
+                <Label>Box wording</Label>
+                <textarea
+                  value={config.marketing.label}
+                  maxLength={300}
+                  onChange={(e) =>
+                    patch({ marketing: { ...config.marketing!, label: e.target.value } })
+                  }
+                  rows={2}
+                  className={`${INPUT} py-2`}
+                />
+              </div>
+              <label className="mt-3 flex items-start gap-2 text-[12px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={config.marketing.doubleOptIn}
+                  onChange={(e) =>
+                    patch({
+                      marketing: { ...config.marketing!, doubleOptIn: e.target.checked },
+                    })
+                  }
+                  className="mt-[2px] h-4 w-4"
+                />
+                <span>
+                  Double opt-in: email a link to confirm
+                  <span className="block text-[10.5px] text-ink-mute">
+                    Proves the address is theirs. They only enter sequences once
+                    they click it. The enquiry and any deal happen straight away
+                    either way.
+                  </span>
+                </span>
+              </label>
+            </>
+          )}
         </Card>
 
         <Card>

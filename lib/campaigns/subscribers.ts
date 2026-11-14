@@ -266,7 +266,13 @@ export function buildHistoryEvents(input: {
     unsubscribedAt: Date | null;
   }>;
   automationNames: Map<string, string>;
-  submissions: Array<{ formId: string; submittedAt: Date; dealId: string | null }>;
+  submissions: Array<{
+    formId: string;
+    submittedAt: Date;
+    dealId: string | null;
+    consentStatus?: string;
+    confirmedAt?: Date | null;
+  }>;
   formNames: Map<string, string>;
   responses: Array<{ surveyId: string; submittedAt: Date; answers: unknown }>;
   surveyNames: Map<string, string>;
@@ -283,7 +289,12 @@ export function buildHistoryEvents(input: {
     events.push({
       kind: "enquiry",
       label: `Form: ${input.formNames.get(f.formId) ?? "an enquiry form"}`,
-      detail: f.dealId ? "Sent an enquiry, now a deal in the pipeline" : "Sent an enquiry",
+      detail: [
+        f.dealId ? "Sent an enquiry, now a deal in the pipeline" : "Sent an enquiry",
+        consentNote(f.consentStatus, f.confirmedAt ?? null),
+      ]
+        .filter(Boolean)
+        .join(". "),
       at: f.submittedAt,
     });
   }
@@ -298,4 +309,22 @@ export function buildHistoryEvents(input: {
     });
   }
   return events.sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+/** The marketing-permission half of an enquiry's timeline line. */
+function consentNote(status: string | undefined, confirmedAt: Date | null): string {
+  switch (status) {
+    case "declined":
+      return "Didn't tick the box for marketing emails";
+    case "opted-in":
+      return "Ticked the box for marketing emails";
+    case "pending":
+      return "Ticked the box for marketing emails; not confirmed by email yet";
+    case "confirmed":
+      return confirmedAt
+        ? `Ticked the box for marketing emails and confirmed by email on ${confirmedAt.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}`
+        : "Ticked the box for marketing emails and confirmed by email";
+    default:
+      return "";
+  }
 }

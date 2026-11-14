@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { repos } from "@/lib/db/repos";
 import { submitForm } from "@/lib/forms/submit";
+import { tickedYes } from "@/lib/forms/consent";
 
 /**
  * Public form submission endpoint.
@@ -73,6 +74,7 @@ export async function POST(
     email = "",
     phone = "",
     pageId = "",
+    marketing,
     ...answers
   } = payload;
   delete (answers as Record<string, unknown>).website;
@@ -85,6 +87,7 @@ export async function POST(
     // Unverified — submitForm checks it names a published page
     // that embeds this form before recording it.
     pageId,
+    marketingOptIn: tickedYes(marketing),
     ipAddress:
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       req.headers.get("x-real-ip") ??

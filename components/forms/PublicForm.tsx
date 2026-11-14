@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { FIELD_LABELS, type FormConfig, type FormField } from "@/lib/forms/types";
+import {
+  DEFAULT_MARKETING_LABEL,
+  FIELD_LABELS,
+  type FormConfig,
+  type FormField,
+} from "@/lib/forms/types";
 
 /**
  * The form a customer actually fills in.
@@ -31,6 +36,9 @@ export function PublicForm({
     "idle",
   );
   const [error, setError] = React.useState<string | null>(null);
+  /* Whether to add "check your inbox" to the thanks: only when they
+     ticked the box on a double opt-in form. */
+  const [awaitingConfirm, setAwaitingConfirm] = React.useState(false);
 
   // Count the impression once, so the conversion rate has a denominator.
   React.useEffect(() => {
@@ -65,6 +73,9 @@ export function PublicForm({
         | { ok: true; thanks: string }
         | { ok: false; error: string };
       if (result.ok) {
+        setAwaitingConfirm(
+          Boolean(config.marketing?.ask && config.marketing.doubleOptIn && payload.marketing === "yes"),
+        );
         setState("done");
       } else {
         setError(result.error);
@@ -80,6 +91,12 @@ export function PublicForm({
     return (
       <div className={compact ? "" : "text-center"}>
         <p className="text-[14px] leading-relaxed text-ink">{config.thanks}</p>
+        {awaitingConfirm && (
+          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-mute">
+            We&rsquo;ve also emailed you a link to confirm you&rsquo;d like our emails. Until you
+            click it, we&rsquo;ll only contact you about this enquiry.
+          </p>
+        )}
       </div>
     );
   }
@@ -115,6 +132,20 @@ export function PublicForm({
         aria-hidden="true"
         className="hidden"
       />
+
+      {/* Never pre-ticked: consent has to be something they did. */}
+      {config.marketing?.ask && (
+        <label className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-soft">
+          <input
+            type="checkbox"
+            name="marketing"
+            value="yes"
+            defaultChecked={false}
+            className="mt-[3px] h-4 w-4 shrink-0"
+          />
+          <span>{config.marketing.label || DEFAULT_MARKETING_LABEL}</span>
+        </label>
+      )}
 
       <button
         type="submit"

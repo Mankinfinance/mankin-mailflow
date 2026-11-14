@@ -151,3 +151,15 @@ describe("header injection", () => {
     expect(mime).not.toMatch(/^Bcc:/m);
   });
 });
+
+describe("a transactional message", () => {
+  it("goes without the bulk-mail headers when there is no unsubscribe link", () => {
+    const { unsubscribeUrl: _u, unsubscribeMailto: _m, ...rest } = BASE;
+    void _u;
+    void _m;
+    const mime = buildMimeMessage(rest);
+    expect(mime).not.toContain("List-Unsubscribe");
+    expect(mime).not.toContain("Precedence: bulk");
+    expect(mime).toContain("Auto-Submitted: auto-generated");
+  });
+});

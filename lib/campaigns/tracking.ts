@@ -29,7 +29,7 @@ const AUDIENCE = "campaign";
  */
 const TOKEN_TTL_DAYS = 730;
 
-export type TrackingPurpose = "unsubscribe" | "open" | "click" | "view";
+export type TrackingPurpose = "unsubscribe" | "open" | "click" | "view" | "confirm";
 
 export interface TrackingClaims {
   /** Campaign the email belongs to. */

@@ -223,6 +223,27 @@ describe("the form-submission trigger", () => {
     expect(hits[0].email).toBe("new@example.com");
   });
 
+  it("only takes enquiries with permission to market", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "form-submission", formId: "F-1" },
+      settlements: [],
+      deals: [],
+      submissions: [
+        submission({ email: "a@example.com", consentStatus: "enquiry" }),
+        submission({ email: "b@example.com", consentStatus: "declined" }),
+        submission({ email: "c@example.com", consentStatus: "opted-in" }),
+        submission({ email: "d@example.com", consentStatus: "pending" }),
+        submission({ email: "e@example.com", consentStatus: "confirmed" }),
+      ],
+    });
+    expect(hits.map((h) => h.email).sort()).toEqual([
+      "a@example.com",
+      "c@example.com",
+      "e@example.com",
+    ]);
+  });
+
   it("ignores enquiries from a different form", () => {
     const hits = evaluateTrigger({
       ...base,
