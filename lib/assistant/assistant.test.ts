@@ -59,7 +59,7 @@ const { MAILFLOW_GUIDE } = await import("./knowledge");
 const { AssistantRequestSchema, MAX_TURNS, MAX_CHARS } = await import("./request");
 const { isMailflowPath, segments } = await import("@/components/mailflow/Assistant");
 const { repos } = await import("@/lib/db/repos");
-const { MERGE_FIELDS } = await import("@/lib/campaigns/audience");
+const { SEQUENCE_MERGE_FIELDS } = await import("@/lib/campaigns/audience");
 const { AUTOMATION_TEMPLATES } = await import("@/lib/automations/types");
 const { WebhookEventSchema } = await import("@/lib/webhooks/types");
 
@@ -334,7 +334,7 @@ describe("the guide stays true to the product", () => {
     const listed = [...MAILFLOW_GUIDE.matchAll(/\{\{([a-z_]+)\}\}/g)]
       .map((m) => m[1])
       .filter((f) => f !== "firstname" && f !== "survey_link");
-    expect(new Set(listed)).toEqual(new Set(MERGE_FIELDS));
+    expect(new Set(listed)).toEqual(new Set(SEQUENCE_MERGE_FIELDS));
   });
 
   it("names every automation template", () => {

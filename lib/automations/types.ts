@@ -61,6 +61,19 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     /** e.g. 25 for "has paid down a quarter of the original balance". */
     percentPaidDown: z.number().int().positive().max(100).default(25),
   }),
+  z.object({
+    /**
+     * A date kept against the contact (Settings > Key dates), e.g. "90
+     * days before their fixed rate ends". Each person goes through it
+     * once. Someone whose day passed more than a fortnight before the
+     * sequence was turned on isn't started late.
+     */
+    kind: z.literal("date"),
+    /** Id of a date field in Settings. Empty on a template until chosen. */
+    fieldId: z.string(),
+    days: z.number().int().min(0).max(730).default(90),
+    when: z.enum(["before", "after"]).default("before"),
+  }),
 ]);
 
 export type Trigger = z.infer<typeof TriggerSchema>;
@@ -624,6 +637,59 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
           next: "exit-tagged",
         }),
         { id: "exit-tagged", kind: "exit", note: "One email per tag." },
+      ],
+    },
+  },
+
+  {
+    id: "fixed-rate-ending",
+    name: "Fixed rate ending",
+    description:
+      "Three months out, before the lender's revert rate kicks in, with one follow-up.",
+    category: "Reminder",
+    icon: "calendar-check",
+    volume: "Set the date on each client under Subscribers",
+    flow: {
+      trigger: { kind: "date", fieldId: "fixed-rate-expiry", days: 90, when: "before" },
+      entryNodeId: "send-fixed",
+      nodes: [
+        send({
+          id: "send-fixed",
+          label: "Fixed rate ending",
+          subject: "{{first_name}}, your fixed rate ends on {{key_date}}",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "Your fixed rate ends on {{key_date}}. When it does, the loan rolls onto the lender's revert rate, which is usually well above what they offer new customers.",
+            "",
+            "Three months out is the right time to look: there's room to refix, reprice or move without rushing.",
+            "",
+            "[Book a 15-minute call]({{booking_url}})",
+          ],
+          next: "wait-fixed",
+        }),
+        { id: "wait-fixed", kind: "delay", days: 21, next: "fixed-opened?" },
+        {
+          id: "fixed-opened?",
+          kind: "condition",
+          check: "clicked",
+          withinDays: 21,
+          nextYes: "exit-fixed-booked",
+          nextNo: "send-fixed-followup",
+        },
+        send({
+          id: "send-fixed-followup",
+          label: "Fixed rate follow-up",
+          subject: "{{first_name}}, about {{key_date}}",
+          lines: [
+            "Hi {{first_name}},",
+            "",
+            "A quick follow-up on your fixed rate ending {{key_date}}. Reply with a time that suits and I'll have the options ready.",
+          ],
+          next: "exit-fixed-followed",
+        }),
+        { id: "exit-fixed-booked", kind: "exit", note: "Clicked through; broker picks it up." },
+        { id: "exit-fixed-followed", kind: "exit", note: "Followed up once." },
       ],
     },
   },

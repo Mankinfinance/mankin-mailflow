@@ -7,6 +7,7 @@ import { currentBroker } from "@/lib/auth/current-broker";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { listSettlements } from "@/lib/settlements-store";
 import { repos } from "@/lib/db/repos";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { TEAM } from "@/lib/team";
 import { STAGES } from "@/lib/clients/salestrekker/types";
 import {
@@ -50,6 +51,7 @@ export default async function SubscribersPage() {
       repos().marketingContact.list(),
     ]);
 
+  const settings = await currentSettings();
   const tags: Record<string, string[]> = {};
   for (const row of tagRows) {
     (tags[row.email] ??= []).push(row.tag);
@@ -140,6 +142,7 @@ export default async function SubscribersPage() {
                 <AddContacts
                   brokers={TEAM.filter((m) => m.email).map((m) => ({ id: m.id, name: m.name }))}
                   defaultBrokerId={TEAM.some((m) => m.id === broker.id) ? broker.id : "mm"}
+                  dateFields={settings.dateFields}
                 />
               </div>
             }
@@ -156,6 +159,7 @@ export default async function SubscribersPage() {
             onSuppress={suppressManyAction}
             onTag={tagContactsAction}
             ownList={ownList}
+            dateFields={settings.dateFields}
             onRemoveFromList={removeFromListAction}
             onUntag={untagContactsAction}
           />

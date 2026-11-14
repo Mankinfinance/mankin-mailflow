@@ -24,6 +24,7 @@ import {
   emailSuppressions,
   emailPreferences,
   marketingContacts,
+  contactDates,
   automations,
   automationRuns,
   automationSends,
@@ -66,6 +67,7 @@ import {
   type NewCampaignRecipient,
   type EmailSuppressionRow,
   type MarketingContactRow,
+  type ContactDateRow,
   type NewMarketingContact,
   type NewEmailSuppression,
   type CampaignLinkClickRow,
@@ -566,6 +568,15 @@ export interface EmailTemplateRepo {
   recordUse(id: string): Promise<void>;
 }
 
+export interface ContactDateRepo {
+  /** One person's dates, by field id. */
+  forEmail(email: string): Promise<Record<string, string>>;
+  /** Everyone with a date in this field. */
+  listField(fieldId: string): Promise<ContactDateRow[]>;
+  /** Set (YYYY-MM-DD) or clear (null) one date. */
+  set(email: string, fieldId: string, date: string | null, by: string): Promise<void>;
+}
+
 export interface MarketingContactRepo {
   list(limit?: number): Promise<MarketingContactRow[]>;
   get(email: string): Promise<MarketingContactRow | null>;
@@ -691,6 +702,7 @@ export interface RepoBundle {
   emailTemplate: EmailTemplateRepo;
   contactTag: ContactTagRepo;
   marketingContact: MarketingContactRepo;
+  contactDate: ContactDateRepo;
   segment: AudienceSegmentRepo;
   settings: MailflowSettingsRepo;
   media: MediaFileRepo;
@@ -2885,6 +2897,47 @@ function realRepos(): RepoBundle {
         }
       },
     },
+    contactDate: {
+      async forEmail(email) {
+        const db = getDb();
+        try {
+          const rows = await db
+            .select()
+            .from(contactDates)
+            .where(eq(contactDates.email, email.toLowerCase()));
+          return Object.fromEntries(rows.map((r) => [r.fieldId, r.date]));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return {};
+        }
+      },
+      async listField(fieldId) {
+        const db = getDb();
+        try {
+          return await db.select().from(contactDates).where(eq(contactDates.fieldId, fieldId));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async set(email, fieldId, value, by) {
+        const db = getDb();
+        const key = email.toLowerCase();
+        if (value === null) {
+          await db
+            .delete(contactDates)
+            .where(and(eq(contactDates.email, key), eq(contactDates.fieldId, fieldId)));
+          return;
+        }
+        await db
+          .insert(contactDates)
+          .values({ email: key, fieldId, date: value, updatedBy: by, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [contactDates.email, contactDates.fieldId],
+            set: { date: value, updatedBy: by, updatedAt: new Date() },
+          });
+      },
+    },
     marketingContact: {
       async list(limit = 20_000) {
         const db = getDb();
@@ -3464,6 +3517,7 @@ function mockRepos(): RepoBundle {
   const mockSuppressionStore = new Map<string, EmailSuppressionRow>();
   const mockPreferenceStore = new Map<string, string[]>();
   const mockMarketingContactStore = new Map<string, MarketingContactRow>();
+  const mockContactDateStore = new Map<string, ContactDateRow>();
   /** Keyed "<campaignId>:<url>", mirroring the unique index. */
   const mockLinkClickStore = new Map<string, CampaignLinkClickRow>();
   const mockAutomationStore = new Map<string, AutomationRow>();
@@ -4612,6 +4666,33 @@ function mockRepos(): RepoBundle {
           ...existing,
           timesUsed: existing.timesUsed + 1,
           lastUsedAt: new Date(),
+        });
+      },
+    },
+    contactDate: {
+      async forEmail(email) {
+        const key = email.toLowerCase();
+        return Object.fromEntries(
+          [...mockContactDateStore.values()]
+            .filter((r) => r.email === key)
+            .map((r) => [r.fieldId, r.date]),
+        );
+      },
+      async listField(fieldId) {
+        return [...mockContactDateStore.values()].filter((r) => r.fieldId === fieldId);
+      },
+      async set(email, fieldId, value, by) {
+        const key = `${email.toLowerCase()}|${fieldId}`;
+        if (value === null) {
+          mockContactDateStore.delete(key);
+          return;
+        }
+        mockContactDateStore.set(key, {
+          email: email.toLowerCase(),
+          fieldId,
+          date: value,
+          updatedBy: by,
+          updatedAt: new Date(),
         });
       },
     },

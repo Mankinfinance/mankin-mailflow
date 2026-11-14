@@ -1,6 +1,7 @@
 import "server-only";
 import { STAGES } from "@/lib/clients/salestrekker/types";
 import { repos } from "@/lib/db/repos";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { dealIdForSource } from "@/lib/campaigns/types";
 import type { AutomationRow, AutomationRunRow } from "@/lib/db/schema";
@@ -73,7 +74,11 @@ export async function describeTriggerFor(trigger: Trigger): Promise<string> {
     trigger.kind === "form-submission"
       ? ((await repos().form.get(trigger.formId))?.name ?? undefined)
       : undefined;
-  return describeTrigger(trigger, stageLabel, formName);
+  const dateLabel =
+    trigger.kind === "date"
+      ? (await currentSettings()).dateFields.find((f) => f.id === trigger.fieldId)?.label
+      : undefined;
+  return describeTrigger(trigger, stageLabel, formName, dateLabel);
 }
 
 /** Who and which sequence — carried by every lifecycle event. */

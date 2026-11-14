@@ -22,6 +22,7 @@ import {
   type TemplateCategory,
 } from "@/lib/automations/types";
 import { describeTrigger } from "@/lib/automations/triggers";
+import { DEFAULT_DATE_FIELDS } from "@/lib/mailflow/settings";
 import { createAutomationAction } from "@/app/(mailflow)/marketing/automations/actions";
 import { Eyebrow } from "./MailflowPage";
 
@@ -52,6 +53,10 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   tag: Tag,
   "message-square-quote": MessageSquareQuote,
 };
+
+function dateLabelFor(fieldId: string): string | undefined {
+  return DEFAULT_DATE_FIELDS.find((f) => f.id === fieldId)?.label;
+}
 
 export function AutomationTemplates({
   stageLabels,
@@ -180,6 +185,10 @@ export function AutomationTemplates({
                     template.flow.trigger,
                     template.flow.trigger.kind === "pipeline-stage"
                       ? stageLabels[template.flow.trigger.stageId]
+                      : undefined,
+                    undefined,
+                    template.flow.trigger.kind === "date"
+                      ? dateLabelFor(template.flow.trigger.fieldId)
                       : undefined,
                   )}
                 </p>

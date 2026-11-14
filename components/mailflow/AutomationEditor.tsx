@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import type { AutomationNode } from "@/lib/automations/types";
 import { editableFields, type StepPatch } from "@/lib/automations/edit";
-import { MERGE_FIELDS } from "@/lib/campaigns/audience";
+import { SEQUENCE_MERGE_FIELDS } from "@/lib/campaigns/audience";
 import { checkContent } from "@/lib/campaigns/spam-check";
 import { previewEmail } from "@/lib/campaigns/preview";
 import type { SignatureSettings } from "@/lib/mailflow/settings";
@@ -159,7 +159,8 @@ function StepPanel({
         (i) => i.severity === "warn",
       )
     : [];
-  const mergeFields = node.kind === "survey" ? [...MERGE_FIELDS, "survey_link"] : MERGE_FIELDS;
+  const mergeFields =
+    node.kind === "survey" ? [...SEQUENCE_MERGE_FIELDS, "survey_link"] : SEQUENCE_MERGE_FIELDS;
 
   return (
     <aside

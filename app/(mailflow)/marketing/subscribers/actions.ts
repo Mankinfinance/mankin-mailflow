@@ -6,7 +6,8 @@ import { canAccessAdmin } from "@/lib/auth/permissions";
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
 import { buildHistoryEvents } from "@/lib/campaigns/subscribers";
-import { isEmail } from "@/lib/contacts-import";
+import { isCalendarDate, isEmail } from "@/lib/contacts-import";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { TEAM } from "@/lib/team";
 import type { NewMarketingContact } from "@/lib/db/schema";
 
@@ -96,7 +97,15 @@ export async function untagContactsAction(
  */
 export async function contactHistoryAction(
   email: string,
-): Promise<{ ok: true; events: Array<{ kind: string; label: string; detail: string; at: string }> } | { ok: false; error: string }> {
+): Promise<
+  | {
+      ok: true;
+      events: Array<{ kind: string; label: string; detail: string; at: string }>;
+      /** Key dates by field id, YYYY-MM-DD. */
+      dates: Record<string, string>;
+    }
+  | { ok: false; error: string }
+> {
   const broker = await currentBroker();
   if (!(await canAccessAdmin(broker.id))) {
     return { ok: false, error: "Admin access required." };
@@ -104,13 +113,14 @@ export async function contactHistoryAction(
   const address = String(email ?? "").trim().toLowerCase().slice(0, 320);
   if (!address.includes("@")) return { ok: false, error: "That isn't an email address." };
 
-  const [sends, submissions, responses, automations, forms, surveys] = await Promise.all([
+  const [sends, submissions, responses, automations, forms, surveys, dates] = await Promise.all([
     repos().automation.sendsForEmail(address),
     repos().form.submissionsForEmail(address),
     repos().survey.responsesForEmail(address),
     repos().automation.list(),
     repos().form.list(),
     repos().survey.list(),
+    repos().contactDate.forEmail(address),
   ]);
   const events = buildHistoryEvents({
     sends,
@@ -120,7 +130,7 @@ export async function contactHistoryAction(
     responses,
     surveyNames: new Map(surveys.map((s) => [s.id, s.name])),
   });
-  return { ok: true, events: events.map((e) => ({ ...e, at: e.at.toISOString() })) };
+  return { ok: true, events: events.map((e) => ({ ...e, at: e.at.toISOString() })), dates };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -136,6 +146,8 @@ export interface AddContactsResult {
   suppressed: number;
   /** Rows the server refused (no valid address). */
   rejected: number;
+  /** Key dates set from the file. */
+  datesSet: number;
 }
 
 /**
@@ -148,7 +160,7 @@ export interface AddContactsResult {
  * complete) but stays unsubscribed: an import can never undo an opt-out.
  */
 export async function addContactsAction(input: {
-  rows: Array<{ email: string; name?: string; phone?: string }>;
+  rows: Array<{ email: string; name?: string; phone?: string; dates?: Record<string, string> }>;
   consentNote: string;
   brokerId: string;
   origin: "manual" | "import";
@@ -201,6 +213,24 @@ export async function addContactsAction(input: {
   }
 
   const added = await repos().marketingContact.addMany(clean);
+
+  /* Dates from the file go on everyone in it, including people already
+     on the list: a spreadsheet of fixed-rate expiries is exactly how
+     these arrive. Only fields that exist and dates that are real. */
+  const { dateFields } = await currentSettings();
+  const knownFields = new Set(dateFields.map((f) => f.id));
+  let datesSet = 0;
+  const done = new Set<string>();
+  for (const r of input.rows) {
+    const email = String(r?.email ?? "").trim().toLowerCase();
+    if (!seen.has(email) || done.has(email) || !r.dates || typeof r.dates !== "object") continue;
+    done.add(email);
+    for (const [fieldId, value] of Object.entries(r.dates).slice(0, 12)) {
+      if (!knownFields.has(fieldId) || typeof value !== "string" || !isCalendarDate(value)) continue;
+      await repos().contactDate.set(email, fieldId, value, broker.id);
+      datesSet += 1;
+    }
+  }
   const suppressed = await repos().campaign.suppressedAmong(added);
 
   await auditLog({
@@ -211,6 +241,7 @@ export async function addContactsAction(input: {
       alreadyOnList: clean.length - added.length,
       rejected,
       suppressed: suppressed.size,
+      datesSet,
       brokerId: input.brokerId,
       consentNote,
     },
@@ -222,6 +253,7 @@ export async function addContactsAction(input: {
     alreadyOnList: clean.length - added.length,
     suppressed: suppressed.size,
     rejected,
+    datesSet,
   };
 }
 
@@ -239,5 +271,31 @@ export async function removeFromListAction(email: string): Promise<{ ok: boolean
     meta: { email: address },
   });
   revalidatePath("/marketing/subscribers");
+  return { ok: true };
+}
+
+/**
+ * Set or clear one of a contact's key dates (Settings > Key dates). A
+ * date-started sequence reads these.
+ */
+export async function setContactDateAction(
+  email: string,
+  fieldId: string,
+  date: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const broker = await currentBroker();
+  if (!(await canAccessAdmin(broker.id))) return { ok: false, error: "Admin access required." };
+  const address = String(email ?? "").trim().toLowerCase();
+  if (!isEmail(address)) return { ok: false, error: "That isn't an email address." };
+  const { dateFields } = await currentSettings();
+  if (!dateFields.some((f) => f.id === fieldId)) return { ok: false, error: "That date isn't in Settings." };
+  if (date !== null && !isCalendarDate(date)) return { ok: false, error: "Use a real date." };
+
+  await repos().contactDate.set(address, fieldId, date, broker.id);
+  await auditLog({
+    actor: { type: "broker", id: broker.id },
+    action: "contacts.set-date",
+    meta: { email: address, fieldId, date },
+  });
   return { ok: true };
 }

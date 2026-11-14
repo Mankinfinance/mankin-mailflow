@@ -100,6 +100,7 @@ export async function saveSettingsAction(input: unknown): Promise<Result> {
       trackClicksByDefault: settings.trackClicksByDefault,
       topics: settings.topics.map((t) => t.id),
       topicsBefore: stored.topics.map((t) => t.id),
+      dateFields: settings.dateFields.map((t) => t.id),
     },
   });
 

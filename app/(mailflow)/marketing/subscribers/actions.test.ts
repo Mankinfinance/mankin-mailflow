@@ -7,7 +7,7 @@ vi.mock("@/lib/auth/permissions", () => ({ canAccessAdmin: async () => true }));
 vi.mock("@/lib/audit", () => ({ auditLog: async () => {} }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {}, unstable_cache: (fn: unknown) => fn }));
 
-const { addContactsAction, removeFromListAction } = await import("./actions");
+const { addContactsAction, removeFromListAction, setContactDateAction } = await import("./actions");
 const { repos } = await import("@/lib/db/repos");
 
 const base = { consentNote: "Signed up at the March seminar", brokerId: "mm", origin: "import" as const };
@@ -54,5 +54,32 @@ describe("adding to your own list", () => {
     await addContactsAction({ ...base, rows: [{ email: "gone@example.com" }] });
     expect(await removeFromListAction("Gone@example.com")).toEqual({ ok: true });
     expect(await repos().marketingContact.get("gone@example.com")).toBeNull();
+  });
+});
+
+describe("key dates", () => {
+  it("sets, changes and clears a date", async () => {
+    expect(await setContactDateAction("Sarah@Example.com", "fixed-rate-expiry", "2027-02-14")).toEqual({ ok: true });
+    expect(await repos().contactDate.forEmail("sarah@example.com")).toEqual({ "fixed-rate-expiry": "2027-02-14" });
+    await setContactDateAction("sarah@example.com", "fixed-rate-expiry", null);
+    expect(await repos().contactDate.forEmail("sarah@example.com")).toEqual({});
+  });
+
+  it("refuses unknown fields and impossible dates", async () => {
+    expect(await setContactDateAction("s@example.com", "made-up", "2027-02-14")).toMatchObject({ ok: false });
+    expect(await setContactDateAction("s@example.com", "fixed-rate-expiry", "2027-02-31")).toMatchObject({ ok: false });
+  });
+
+  it("takes dates from an import, for new and existing contacts", async () => {
+    await addContactsAction({ ...base, rows: [{ email: "old@example.com" }] });
+    const r = await addContactsAction({
+      ...base,
+      rows: [
+        { email: "old@example.com", dates: { "fixed-rate-expiry": "2027-05-01" } },
+        { email: "new@example.com", dates: { "fixed-rate-expiry": "2027-06-01", "made-up": "2027-01-01" } },
+      ],
+    });
+    expect(r).toMatchObject({ ok: true, added: 1, alreadyOnList: 1, datesSet: 2 });
+    expect(await repos().contactDate.forEmail("old@example.com")).toEqual({ "fixed-rate-expiry": "2027-05-01" });
   });
 });

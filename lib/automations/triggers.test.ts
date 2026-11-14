@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  dateTriggerDue,
   daysInStage,
   describeTrigger,
+  formatKeyDate,
   evaluateTrigger,
   isAnniversaryDue,
   percentPaidDown,
@@ -480,5 +482,47 @@ describe("describeTrigger for the new kinds", () => {
     expect(describeTrigger({ kind: "equity-milestone", percentPaidDown: 25 })).toBe(
       "A loan passes 25% paid down",
     );
+  });
+});
+
+describe("the date trigger", () => {
+  // TODAY is 25 Aug 2026; 90 days before 23 Nov 2026 is 25 Aug 2026.
+  const day = (d: Date) => Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
+
+  it("is due on the day, and for a fortnight after, not before", () => {
+    expect(dateTriggerDue("2026-11-23", 90, "before", day(TODAY))).toBe(true);
+    expect(dateTriggerDue("2026-11-24", 90, "before", day(TODAY))).toBe(false);
+    expect(dateTriggerDue("2026-11-10", 90, "before", day(TODAY))).toBe(true);
+    expect(dateTriggerDue("2026-11-09", 90, "before", day(TODAY))).toBe(false);
+  });
+
+  it("counts after the date too, and on the day itself", () => {
+    expect(dateTriggerDue("2026-08-15", 10, "after", day(TODAY))).toBe(true);
+    expect(dateTriggerDue("2026-08-25", 0, "before", day(TODAY))).toBe(true);
+    expect(dateTriggerDue("not a date", 0, "before", day(TODAY))).toBe(false);
+  });
+
+  it("enrols whoever's date is due, with the date to quote", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "date", fieldId: "fixed-rate-expiry", days: 90, when: "before" },
+      settlements: [settlement()],
+      deals: [],
+      dates: [
+        { email: "sarah@example.com", fieldId: "fixed-rate-expiry", date: "2026-11-23" },
+        { email: "sarah@example.com", fieldId: "pre-approval-expiry", date: "2026-11-23" },
+        { email: "later@example.com", fieldId: "fixed-rate-expiry", date: "2027-03-01" },
+      ],
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].email).toBe("sarah@example.com");
+    expect(hits[0].fields.key_date).toBe("23 November 2026");
+  });
+
+  it("describes itself in words", () => {
+    expect(
+      describeTrigger({ kind: "date", fieldId: "x", days: 90, when: "before" }, undefined, undefined, "Fixed rate ends"),
+    ).toBe("90 days before fixed rate ends");
+    expect(formatKeyDate("2027-02-14")).toBe("14 February 2027");
   });
 });

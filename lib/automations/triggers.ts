@@ -100,6 +100,8 @@ export interface EvaluateTriggerInput {
   /** Mailflow's own list, so a tag on someone outside the loan book and
    *  pipeline can still start a sequence. */
   contacts?: Array<{ email: string; name: string; brokerId: string }>;
+  /** Dates kept against contacts, for kind "date". */
+  dates?: Array<{ email: string; fieldId: string; date: string }>;
   fieldsForContact?: (c: { email: string; name: string; brokerId: string }) => Record<string, string>;
   /** Contacts already in this automation — never enrolled twice. */
   alreadyEnrolled: ReadonlySet<string>;
@@ -117,6 +119,68 @@ export function evaluateTrigger(input: EvaluateTriggerInput): TriggerHit[] {
 
   const eligible = (email: string) =>
     Boolean(email) && !alreadyEnrolled.has(email) && !suppressed.has(email);
+
+  /* An address is the one identity that spans the loan book, the
+     pipeline and the firm's own list, so tags and dates resolve to the
+     richest record the way the subscriber list does: back-book first,
+     then pipeline, then your own list. */
+  const resolvePerson = (email: string): TriggerHit | null => {
+    const settlement = input.settlements.find((x) => x.email.trim().toLowerCase() === email);
+    if (settlement) {
+      const fields = input.fieldsForSettlement(settlement);
+      return {
+        email,
+        name: settlement.clientName,
+        firstName: fields.first_name ?? "there",
+        sourceKind: "settlements",
+        sourceId: settlement.id,
+        brokerId: settlement.brokerId ?? "",
+        fields,
+      };
+    }
+    const deal = input.deals.find((x) => x.email.trim().toLowerCase() === email);
+    if (deal) {
+      const fields = input.fieldsForDeal(deal);
+      return {
+        email,
+        name: deal.name,
+        firstName: fields.first_name ?? "there",
+        sourceKind: "deals",
+        sourceId: deal.id,
+        brokerId: deal.brokerId,
+        fields,
+      };
+    }
+    const contact = input.contacts?.find((c) => c.email.trim().toLowerCase() === email);
+    if (contact && input.fieldsForContact) {
+      const fields = input.fieldsForContact(contact);
+      return {
+        email,
+        name: contact.name,
+        firstName: fields.first_name ?? "there",
+        sourceKind: "contacts",
+        sourceId: email,
+        brokerId: contact.brokerId,
+        fields,
+      };
+    }
+    return null;
+  };
+
+  if (trigger.kind === "date") {
+    const todayN = dayNumberOf(today);
+    for (const row of input.dates ?? []) {
+      if (row.fieldId !== trigger.fieldId) continue;
+      const email = row.email.trim().toLowerCase();
+      if (!eligible(email)) continue;
+      const due = dateTriggerDue(row.date, trigger.days, trigger.when, todayN);
+      if (!due) continue;
+      const person = resolvePerson(email);
+      if (!person) continue;
+      hits.push({ ...person, fields: { ...person.fields, key_date: formatKeyDate(row.date) } });
+    }
+    return hits;
+  }
 
   if (trigger.kind === "form-submission") {
     /* An enquiry is its own evidence of entry, so there is no window to
@@ -162,53 +226,8 @@ export function evaluateTrigger(input: EvaluateTriggerInput): TriggerHit[] {
       const email = event.email.trim().toLowerCase();
       if (!eligible(email)) continue;
 
-      /* A tag is on an address, which is the one identity that spans
-         both datasets — so resolve the richer record the way the
-         subscriber list does, back-book first. */
-      const settlement = input.settlements.find(
-        (x) => x.email.trim().toLowerCase() === email,
-      );
-      if (settlement) {
-        const fields = input.fieldsForSettlement(settlement);
-        hits.push({
-          email,
-          name: settlement.clientName,
-          firstName: fields.first_name ?? "there",
-          sourceKind: "settlements",
-          sourceId: settlement.id,
-          brokerId: settlement.brokerId ?? "",
-          fields,
-        });
-        continue;
-      }
-      const deal = input.deals.find(
-        (x) => x.email.trim().toLowerCase() === email,
-      );
-      if (!deal) {
-        const contact = input.contacts?.find((c) => c.email.trim().toLowerCase() === email);
-        if (!contact || !input.fieldsForContact) continue;
-        const fields = input.fieldsForContact(contact);
-        hits.push({
-          email,
-          name: contact.name,
-          firstName: fields.first_name ?? "there",
-          sourceKind: "contacts",
-          sourceId: email,
-          brokerId: contact.brokerId,
-          fields,
-        });
-        continue;
-      }
-      const fields = input.fieldsForDeal(deal);
-      hits.push({
-        email,
-        name: deal.name,
-        firstName: fields.first_name ?? "there",
-        sourceKind: "deals",
-        sourceId: deal.id,
-        brokerId: deal.brokerId,
-        fields,
-      });
+      const person = resolvePerson(email);
+      if (person) hits.push(person);
     }
     return hits;
   }
@@ -318,7 +337,14 @@ export function describeTrigger(
   trigger: Trigger,
   stageLabel?: string,
   formName?: string,
+  dateLabel?: string,
 ): string {
+  if (trigger.kind === "date") {
+    const what = dateLabel ?? (trigger.fieldId ? "a date you choose" : "a date you choose");
+    return trigger.days === 0
+      ? `On the day: ${what.toLowerCase()}`
+      : `${trigger.days} ${trigger.days === 1 ? "day" : "days"} ${trigger.when} ${what.toLowerCase()}`;
+  }
   if (trigger.kind === "form-submission") {
     return `Someone enquires through ${formName ?? "a form"}`;
   }
@@ -342,4 +368,44 @@ export function describeTrigger(
   return trigger.afterDays === 0
     ? `A deal reaches ${stage}`
     : `A deal has been at ${stage} for ${trigger.afterDays} days`;
+}
+
+/** Days since the epoch for a calendar date, ignoring time of day. */
+function dayNumberOf(d: Date): number {
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
+}
+
+function parseDay(value: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  return Math.floor(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86_400_000);
+}
+
+/** How long after its day a date trigger still starts someone: covers
+ *  a missed cron and a sequence turned on a few days late, without
+ *  writing "three months before" to someone it's now a week before. */
+export const DATE_TRIGGER_GRACE_DAYS = 14;
+
+export function dateTriggerDue(
+  date: string,
+  days: number,
+  when: "before" | "after",
+  todayN: number,
+): boolean {
+  const day = parseDay(date);
+  if (day === null) return false;
+  const target = when === "before" ? day - days : day + days;
+  return todayN >= target && todayN < target + DATE_TRIGGER_GRACE_DAYS;
+}
+
+/** "14 February 2027", for {{key_date}}. */
+export function formatKeyDate(date: string): string {
+  const day = parseDay(date);
+  if (day === null) return date;
+  return new Date(day * 86_400_000).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }

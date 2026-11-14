@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import {
@@ -32,6 +33,10 @@ export default async function AutomationsPage() {
     STAGES.map((s) => [s.id, s.shortLabel]),
   );
 
+  const dateLabels = Object.fromEntries(
+    (await currentSettings()).dateFields.map((f) => [f.id, f.label]),
+  );
+
   const rows = await Promise.all(
     automations.map(async (a) => {
       const runs = await repos().automation.listRuns(a.id, { limit: 5000 });
@@ -45,6 +50,10 @@ export default async function AutomationsPage() {
               parsed.data.trigger,
               parsed.data.trigger.kind === "pipeline-stage"
                 ? stageLabels[parsed.data.trigger.stageId]
+                : undefined,
+              undefined,
+              parsed.data.trigger.kind === "date"
+                ? dateLabels[parsed.data.trigger.fieldId]
                 : undefined,
             )
           : "Unreadable sequence",

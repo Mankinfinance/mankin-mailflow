@@ -7,7 +7,10 @@ import { filterSubscribers, type Subscriber } from "@/lib/campaigns/subscribers"
 import type { ActivityEvent } from "@/lib/campaigns/subscribers";
 import type { EngagementProfile, SendWindow } from "@/lib/campaigns/engagement";
 import { EngagementPanel } from "./EngagementPanel";
-import { contactHistoryAction } from "@/app/(mailflow)/marketing/subscribers/actions";
+import {
+  contactHistoryAction,
+  setContactDateAction,
+} from "@/app/(mailflow)/marketing/subscribers/actions";
 import { Eyebrow } from "./MailflowPage";
 
 /**
@@ -45,6 +48,8 @@ export interface SubscriberTableProps {
   ownList?: Record<string, { origin: string; consentNote: string; addedBy: string }>;
   /** Take someone off Mailflow's own list. */
   onRemoveFromList?: (email: string) => Promise<{ ok: boolean }>;
+  /** Key date fields from Settings. */
+  dateFields?: Array<{ id: string; label: string }>;
 }
 
 export function SubscriberTable({
@@ -61,6 +66,7 @@ export function SubscriberTable({
   onUntag,
   ownList = {},
   onRemoveFromList,
+  dateFields = [],
 }: SubscriberTableProps) {
   const [search, setSearch] = React.useState("");
   const [source, setSource] = React.useState<"all" | "back-book" | "pipeline" | "added">("all");
@@ -369,6 +375,7 @@ export function SubscriberTable({
           onRemoveTag={(t) => onUntag([open.email], t)}
           onClose={() => setOpenEmail(null)}
           ownList={ownList[open.email] ?? null}
+          dateFields={dateFields}
           onRemoveFromList={
             onRemoveFromList
               ? async () => {
@@ -399,7 +406,9 @@ function DetailPanel({
   onClose,
   ownList,
   onRemoveFromList,
+  dateFields,
 }: {
+  dateFields: Array<{ id: string; label: string }>;
   ownList: { origin: string; consentNote: string; addedBy: string } | null;
   onRemoveFromList?: () => Promise<{ ok: boolean }>;
   subscriber: Subscriber;
@@ -419,7 +428,11 @@ function DetailPanel({
      and survey answers are fetched for this one contact when the panel
      opens, so the list itself stays quick. Keyed by email so a slow
      answer for the previous contact can't land on this one. */
-  const [more, setMore] = React.useState<{ email: string; events: ActivityEvent[] } | null>(null);
+  const [more, setMore] = React.useState<{
+    email: string;
+    events: ActivityEvent[];
+    dates: Record<string, string>;
+  } | null>(null);
   React.useEffect(() => {
     let live = true;
     contactHistoryAction(subscriber.email).then((r) => {
@@ -427,6 +440,7 @@ function DetailPanel({
         setMore({
           email: subscriber.email,
           events: r.events.map((e) => ({ ...e, kind: e.kind as ActivityEvent["kind"], at: new Date(e.at) })),
+          dates: r.dates,
         });
       }
     });
@@ -574,6 +588,15 @@ function DetailPanel({
       )}
 
       {profile && <EngagementPanel profile={profile} sendWindow={sendWindow} />}
+
+      {dateFields.length > 0 && more?.email === subscriber.email && (
+        <KeyDates
+          key={subscriber.email}
+          email={subscriber.email}
+          fields={dateFields}
+          initial={more.dates}
+        />
+      )}
 
       <Eyebrow className="mb-2 mt-4">Activity</Eyebrow>
       {timeline.length === 0 ? (
@@ -847,5 +870,55 @@ function PageButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Dates kept against this person, e.g. when their fixed rate ends. A
+ * sequence can start a set number of days before or after one. Saved as
+ * soon as a date is picked or cleared.
+ */
+function KeyDates({
+  email,
+  fields,
+  initial,
+}: {
+  email: string;
+  fields: Array<{ id: string; label: string }>;
+  initial: Record<string, string>;
+}) {
+  const [values, setValues] = React.useState(initial);
+  const [status, setStatus] = React.useState<Record<string, "saving" | "saved" | string>>({});
+
+  async function save(fieldId: string, value: string) {
+    setValues((v) => ({ ...v, [fieldId]: value }));
+    setStatus((s) => ({ ...s, [fieldId]: "saving" }));
+    const r = await setContactDateAction(email, fieldId, value || null);
+    setStatus((s) => ({ ...s, [fieldId]: r.ok ? "saved" : r.error }));
+  }
+
+  return (
+    <div className="mt-4">
+      <Eyebrow className="mb-2">Key dates</Eyebrow>
+      <div className="space-y-1.5">
+        {fields.map((f) => {
+          const st = status[f.id];
+          return (
+            <label key={f.id} className="flex items-center gap-2">
+              <span className="w-[150px] shrink-0 text-[11.5px] text-ink-soft">{f.label}</span>
+              <input
+                type="date"
+                value={values[f.id] ?? ""}
+                onChange={(e) => save(f.id, e.target.value)}
+                className="h-[30px] rounded-md border border-hairline bg-surface px-2 text-[12px] text-ink"
+              />
+              <span className="text-[11px]" style={{ color: st && st !== "saving" && st !== "saved" ? "#a3423e" : "#2f6f4a" }}>
+                {st === "saving" ? "…" : st === "saved" ? "Saved" : (st ?? "")}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
   );
 }

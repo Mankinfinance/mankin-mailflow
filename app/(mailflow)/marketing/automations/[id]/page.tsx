@@ -7,6 +7,7 @@ import { currentSettings } from "@/lib/mailflow/current-settings";
 import { AutomationControls } from "@/components/mailflow/AutomationControls";
 import { TriggerTargetPicker } from "@/components/mailflow/TriggerTargetPicker";
 import { GoalPicker } from "@/components/mailflow/GoalPicker";
+import { DateTriggerPicker } from "@/components/mailflow/DateTriggerPicker";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { repos } from "@/lib/db/repos";
 import { TEAM, teamMember } from "@/lib/team";
@@ -161,6 +162,19 @@ export default async function AutomationPage({
             />
           )}
 
+          {parsed.success && parsed.data.trigger.kind === "date" && (
+            <DateTriggerPicker
+              automationId={automation.id}
+              current={{
+                fieldId: parsed.data.trigger.fieldId,
+                days: parsed.data.trigger.days,
+                when: parsed.data.trigger.when,
+              }}
+              fields={settings.dateFields}
+              locked={automation.status === "live"}
+            />
+          )}
+
           {parsed.success && (
             <GoalPicker
               automationId={automation.id}
@@ -190,6 +204,12 @@ export default async function AutomationPage({
                     ? stageLabels[parsed.data.trigger.stageId]
                     : undefined,
                 formName: triggerForm?.name,
+                dateLabel:
+                  parsed.data.trigger.kind === "date"
+                    ? settings.dateFields.find(
+                        (f) => f.id === (parsed.data.trigger as { fieldId: string }).fieldId,
+                      )?.label
+                    : undefined,
                 brokerNames: Object.fromEntries(TEAM.map((m) => [m.id, m.short])),
               }}
             />

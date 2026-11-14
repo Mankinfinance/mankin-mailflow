@@ -42,6 +42,8 @@ export interface AutomationCanvasProps {
   stageLabel?: string;
   /** Name of the form a signup trigger watches. */
   formName?: string;
+  /** The date field's label, for a date-started sequence. */
+  dateLabel?: string;
   /** Team member names, so a broker condition reads as a person. */
   brokerNames?: Record<string, string>;
 }
@@ -54,6 +56,7 @@ export function AutomationCanvas({
   enteredThisMonth,
   stageLabel,
   formName,
+  dateLabel,
   brokerNames,
 }: AutomationCanvasProps) {
   const statsByNode = new Map(stats.map((s) => [s.nodeId, s]));
@@ -115,7 +118,7 @@ export function AutomationCanvas({
     >
       <div className="mx-auto flex w-full min-w-[680px] max-w-[680px] flex-col items-center">
         <TriggerCard
-          label={describeTrigger(flow.trigger, stageLabel, formName)}
+          label={describeTrigger(flow.trigger, stageLabel, formName, dateLabel)}
           entered={entered}
           thisMonth={enteredThisMonth}
         />

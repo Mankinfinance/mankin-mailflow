@@ -372,3 +372,8 @@ export const MERGE_FIELDS = [
 ] as const;
 
 export type MergeField = (typeof MERGE_FIELDS)[number];
+
+/** Sequences get one more: the date a date-started sequence started
+ *  from, e.g. "14 February 2027". Not offered to campaigns, where it
+ *  would always be blank. */
+export const SEQUENCE_MERGE_FIELDS = [...MERGE_FIELDS, "key_date"] as const;

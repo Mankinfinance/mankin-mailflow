@@ -13,6 +13,7 @@ import {
   type Goal,
 } from "@/lib/automations/types";
 import { STAGES } from "@/lib/clients/salestrekker/types";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { validateFlow } from "@/lib/automations/engine";
 import { applyStepEdit, type StepPatch } from "@/lib/automations/edit";
 
@@ -296,6 +297,50 @@ export async function setAutomationGoalAction(
     actor: { type: "broker", id: auth.brokerId },
     action: "automation.set-goal",
     meta: { automationId: id, goal: next ?? null, previous: parsed.data.goal ?? null },
+  });
+  revalidatePath(`/marketing/automations/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Which date starts a date sequence, and how far before or after it.
+ * Pause first, for the same reason as the form and tag triggers.
+ */
+export async function setDateTriggerAction(
+  id: string,
+  input: { fieldId: string; days: number; when: "before" | "after" },
+): Promise<Result> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const automation = await repos().automation.get(id);
+  if (!automation) return { ok: false, error: "Sequence not found." };
+  if (automation.status === "live") {
+    return { ok: false, error: "Pause the sequence before changing what starts it." };
+  }
+  const parsed = AutomationFlowSchema.safeParse(automation.flow);
+  if (!parsed.success) return { ok: false, error: "This sequence could not be read." };
+  if (parsed.data.trigger.kind !== "date") {
+    return { ok: false, error: "This sequence doesn't start from a date." };
+  }
+
+  const { dateFields } = await currentSettings();
+  if (!dateFields.some((f) => f.id === input.fieldId)) {
+    return { ok: false, error: "Pick one of the dates in Settings." };
+  }
+  if (!Number.isInteger(input.days) || input.days < 0 || input.days > 730) {
+    return { ok: false, error: "Use 0 to 730 days." };
+  }
+  if (input.when !== "before" && input.when !== "after") {
+    return { ok: false, error: "Before or after?" };
+  }
+
+  const trigger = { kind: "date" as const, fieldId: input.fieldId, days: input.days, when: input.when };
+  await repos().automation.update(id, { flow: { ...parsed.data, trigger } });
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "automation.set-trigger",
+    meta: { automationId: id, kind: "date", ...input },
   });
   revalidatePath(`/marketing/automations/${id}`);
   return { ok: true };

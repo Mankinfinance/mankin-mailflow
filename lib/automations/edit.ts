@@ -1,4 +1,4 @@
-import { MERGE_FIELDS } from "@/lib/campaigns/audience";
+import { SEQUENCE_MERGE_FIELDS } from "@/lib/campaigns/audience";
 import { unknownMergeFields } from "@/lib/campaigns/merge";
 import type { AutomationFlow, AutomationNode } from "./types";
 
@@ -42,7 +42,7 @@ export function editableFields(node: AutomationNode): Array<keyof StepPatch> {
   }
 }
 
-const SURVEY_FIELDS = [...MERGE_FIELDS, "survey_link"];
+const SURVEY_FIELDS = [...SEQUENCE_MERGE_FIELDS, "survey_link"];
 
 /* The default delay title, which would go stale if the days changed. */
 const AUTO_WAIT_LABEL = /^wait \d+ days?$/i;
@@ -75,7 +75,7 @@ export function applyStepEdit(
     const body = (patch.body ?? node.body ?? "").trim();
     if (!subject) return { ok: false, error: "The email needs a subject line." };
     if (!body) return { ok: false, error: "The email needs a body." };
-    const known = node.kind === "survey" ? SURVEY_FIELDS : [...MERGE_FIELDS];
+    const known = node.kind === "survey" ? SURVEY_FIELDS : [...SEQUENCE_MERGE_FIELDS];
     const unknown = [
       ...unknownMergeFields(subject, known),
       ...unknownMergeFields(body, known),

@@ -101,6 +101,21 @@ export const DEFAULT_TOPICS: Topic[] = [
   { id: "events", label: "Events and webinars" },
 ];
 
+/**
+ * Dates kept against a contact, that a sequence can start from: "90
+ * days before their fixed rate ends". Same rules as topics: the id is
+ * stored against people and sequences, so it never changes; the label
+ * can.
+ */
+export const DateFieldSchema = TopicSchema;
+export type DateField = Topic;
+
+export const DEFAULT_DATE_FIELDS: DateField[] = [
+  { id: "fixed-rate-expiry", label: "Fixed rate ends" },
+  { id: "interest-only-expiry", label: "Interest-only period ends" },
+  { id: "pre-approval-expiry", label: "Pre-approval expires" },
+];
+
 export const MailflowSettingsSchema = z.object({
   /**
    * Postal address printed in the campaign footer. The broker signature
@@ -144,6 +159,13 @@ export const MailflowSettingsSchema = z.object({
     .max(12)
     .refine((t) => new Set(t.map((x) => x.id)).size === t.length, "Each topic needs its own id.")
     .default(DEFAULT_TOPICS),
+
+  /** Dates kept per contact, for date-started sequences. */
+  dateFields: z
+    .array(DateFieldSchema)
+    .max(12)
+    .refine((t) => new Set(t.map((x) => x.id)).size === t.length, "Each date needs its own id.")
+    .default(DEFAULT_DATE_FIELDS),
 });
 
 export type MailflowSettings = z.infer<typeof MailflowSettingsSchema>;

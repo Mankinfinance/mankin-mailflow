@@ -139,6 +139,21 @@ export function SettingsForm({
         <TopicsEditor topics={draft.topics} onChange={(topics) => patch({ topics })} />
       </Card>
 
+      {/* ── Key dates ── */}
+      <Card>
+        <Eyebrow>Key dates</Eyebrow>
+        <p className="mb-3 mt-1 text-[12px] leading-relaxed text-ink-mute">
+          Dates you keep against a client (open them under Subscribers), so a
+          sequence can start a set time before or after, like three months before
+          a fixed rate ends.
+        </p>
+        <TopicsEditor
+          topics={draft.dateFields}
+          onChange={(dateFields) => patch({ dateFields })}
+          placeholder="Add a date, e.g. Construction loan converts"
+        />
+      </Card>
+
       {/* ── Pace ── */}
       <Card>
         <Eyebrow>Send pace</Eyebrow>
@@ -287,9 +302,11 @@ function slugFor(label: string, taken: Set<string>): string {
 function TopicsEditor({
   topics,
   onChange,
+  placeholder = "Add a topic, e.g. First home buyers",
 }: {
   topics: MailflowSettings["topics"];
   onChange: (next: MailflowSettings["topics"]) => void;
+  placeholder?: string;
 }) {
   const [adding, setAdding] = React.useState("");
 
@@ -329,7 +346,7 @@ function TopicsEditor({
             aria-label="New topic"
             value={adding}
             maxLength={60}
-            placeholder="Add a topic, e.g. First home buyers"
+            placeholder={placeholder}
             onChange={(e) => setAdding(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {

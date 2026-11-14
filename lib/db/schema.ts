@@ -8,6 +8,8 @@ import {
   uniqueIndex,
   uuid,
   boolean,
+  date,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -1058,6 +1060,36 @@ export const marketingContacts = pgTable(
 
 export type MarketingContactRow = typeof marketingContacts.$inferSelect;
 export type NewMarketingContact = typeof marketingContacts.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* contact_dates — dates kept against a contact                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One date per contact per date field (Settings > Key dates), e.g. when
+ * their fixed rate ends. A sequence can start a set number of days
+ * before or after it. Keyed by email, like tags, so it works for anyone
+ * on the subscriber list whichever record they come from.
+ */
+export const contactDates = pgTable(
+  "contact_dates",
+  {
+    email: text("email").notNull(),
+    fieldId: text("field_id").notNull(),
+    /** YYYY-MM-DD, no time or zone: it's a calendar date. */
+    date: date("date", { mode: "string" }).notNull(),
+    updatedBy: text("updated_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.email, t.fieldId] }),
+    index("contact_dates_field_date_idx").on(t.fieldId, t.date),
+  ],
+);
+
+export type ContactDateRow = typeof contactDates.$inferSelect;
 
 /* -------------------------------------------------------------------------- */
 /* campaign_link_clicks — which link in the email people actually pressed     */

@@ -255,4 +255,26 @@ describe("tickAutomations", () => {
     const runs = await repos().automation.listRuns(automation.id);
     expect(runs[0].status).toBe("done");
   });
+
+  it("starts a date sequence for someone whose fixed rate ends in 90 days", async () => {
+    const template = AUTOMATION_TEMPLATES.find((t) => t.id === "fixed-rate-ending")!;
+    const automation = await repos().automation.create({
+      name: template.name,
+      status: "live",
+      flow: template.flow,
+      fromBrokerId: "mm",
+      createdBy: "mm",
+    });
+    // NOW is 25 Aug 2026; 90 days on is 23 Nov 2026.
+    await repos().contactDate.set("sarah@example.com", "fixed-rate-expiry", "2026-11-23", "mm");
+
+    const result = await tickAutomations(NOW);
+
+    expect(result.enrolled).toBe(1);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][0].subject).toContain("23 November 2026");
+    const runs = await repos().automation.listRuns(automation.id);
+    expect(runs[0].fields?.key_date).toBe("23 November 2026");
+    await repos().contactDate.set("sarah@example.com", "fixed-rate-expiry", null, "mm");
+  });
 });

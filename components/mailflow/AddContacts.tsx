@@ -28,9 +28,11 @@ type Mode = "one" | "csv";
 export function AddContacts({
   brokers,
   defaultBrokerId,
+  dateFields = [],
 }: {
   brokers: Array<{ id: string; name: string }>;
   defaultBrokerId: string;
+  dateFields?: Array<{ id: string; label: string }>;
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -46,6 +48,7 @@ export function AddContacts({
       </button>
       {open && (
         <Dialog
+          dateFields={dateFields}
           brokers={brokers}
           defaultBrokerId={defaultBrokerId}
           onClose={() => setOpen(false)}
@@ -59,7 +62,9 @@ function Dialog({
   brokers,
   defaultBrokerId,
   onClose,
+  dateFields,
 }: {
+  dateFields: Array<{ id: string; label: string }>;
   brokers: Array<{ id: string; name: string }>;
   defaultBrokerId: string;
   onClose: () => void;
@@ -92,7 +97,7 @@ function Dialog({
       setFileError("That file is over 5 MB. Split it, or save just the name and email columns.");
       return;
     }
-    const read = readContacts(await file.text());
+    const read = readContacts(await file.text(), 5000, dateFields);
     if ("error" in read) setFileError(read.error);
     else setPreview(read);
   }
@@ -127,6 +132,7 @@ function Dialog({
       if (r.alreadyOnList) parts.push(`${r.alreadyOnList} already on your list`);
       if (r.suppressed) parts.push(`${r.suppressed} had unsubscribed before and stay unsubscribed`);
       if (r.rejected) parts.push(`${r.rejected} skipped (not a valid address)`);
+      if (r.datesSet) parts.push(`${r.datesSet} key ${r.datesSet === 1 ? "date" : "dates"} set`);
       setResult(parts.join(" · "));
       setOne({ email: "", name: "", phone: "" });
       setPreview(null);
@@ -232,8 +238,9 @@ function Dialog({
                 {fileName ?? "Choose a CSV file"}
               </span>
               <span className="mt-0.5 block text-[11px] text-ink-mute">
-                Needs an Email column. Name (or First and Last name) and Phone are picked up
-                if they&apos;re there. Up to 5,000 rows.
+                Needs an Email column. Name (or First and Last name), Phone and any key
+                date named as in Settings (e.g. {dateFields[0]?.label ?? "Fixed rate ends"}) are
+                picked up if they&apos;re there. Up to 5,000 rows.
               </span>
             </label>
             {fileError && <p className="mt-2 text-[12px] text-danger">{fileError}</p>}
@@ -248,6 +255,12 @@ function Dialog({
                   {preview.columns.phone ? `, “${preview.columns.phone}” for phone` : ""}.
                 </p>
                 {preview.duplicates > 0 && <p>{preview.duplicates} repeated in the file, counted once.</p>}
+                {preview.dateColumns?.map((d) => (
+                  <p key={d.fieldId}>
+                    “{d.heading}” sets {d.label.toLowerCase()} for {d.filled}
+                    {d.unreadable > 0 ? ` (${d.unreadable} unreadable, left blank; use day/month/year)` : ""}.
+                  </p>
+                ))}
                 {preview.invalid.length > 0 && (
                   <p>
                     {preview.invalid.length} skipped with no valid address (line

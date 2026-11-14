@@ -512,6 +512,9 @@ export function validateFlow(flow: AutomationFlow): string[] {
   if (flow.trigger.kind === "tag-added" && !flow.trigger.tag.trim()) {
     problems.push("Choose which tag starts this sequence.");
   }
+  if (flow.trigger.kind === "date" && !flow.trigger.fieldId.trim()) {
+    problems.push("Choose which date starts this sequence.");
+  }
 
   for (const node of flow.nodes) {
     if (node.kind === "send" && (!node.subject?.trim() || !node.body?.trim())) {

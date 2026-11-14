@@ -228,6 +228,13 @@ async function enrol(
   }
 
   let contacts: Array<{ email: string; name: string; brokerId: string }> | undefined;
+  let dates: Array<{ email: string; fieldId: string; date: string }> | undefined;
+  if (flow.data.trigger.kind === "date") {
+    [contacts, dates] = await Promise.all([
+      repos().marketingContact.list(),
+      repos().contactDate.listField(flow.data.trigger.fieldId),
+    ]);
+  }
   if (flow.data.trigger.kind === "tag-added") {
     contacts = await repos().marketingContact.list();
     const rows = await repos().contactTag.list();
@@ -249,6 +256,7 @@ async function enrol(
     submissions,
     tagEvents,
     contacts,
+    dates,
     fieldsForContact: (c) =>
       resolveAudience({
         filter: { ...defaultAudienceFilter(), sources: ["contacts"] },

@@ -232,6 +232,13 @@
       "when": 1794634149025,
       "tag": "0032_lush_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794634605221,
+      "tag": "0033_rare_rockslide",
+      "breakpoints": true
     }
   ]
 }

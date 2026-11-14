@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AUTOMATION_TEMPLATES } from "./types";
-import { MERGE_FIELDS } from "@/lib/campaigns/audience";
+import { SEQUENCE_MERGE_FIELDS } from "@/lib/campaigns/audience";
 import { unknownMergeFields } from "@/lib/campaigns/merge";
 
 const emails = AUTOMATION_TEMPLATES.flatMap((t) =>
@@ -21,7 +21,8 @@ describe("automation template emails", () => {
 
   it("only use merge fields a run can fill", () => {
     for (const e of emails) {
-      const known = e.kind === "survey" ? [...MERGE_FIELDS, "survey_link"] : [...MERGE_FIELDS];
+      const known =
+        e.kind === "survey" ? [...SEQUENCE_MERGE_FIELDS, "survey_link"] : [...SEQUENCE_MERGE_FIELDS];
       expect(unknownMergeFields(e.subject, known), e.id).toEqual([]);
       expect(unknownMergeFields(e.body, known), e.id).toEqual([]);
     }
