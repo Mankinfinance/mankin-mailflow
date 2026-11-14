@@ -24,7 +24,8 @@ import {
   type SendWindow,
 } from "@/lib/campaigns/engagement";
 import { suppressManyAction } from "../campaigns/actions";
-import { tagContactsAction, untagContactsAction } from "./actions";
+import { removeFromListAction, tagContactsAction, untagContactsAction } from "./actions";
+import { AddContacts } from "@/components/mailflow/AddContacts";
 
 export const metadata = { title: "Subscribers · Mailflow" };
 
@@ -38,7 +39,7 @@ export const metadata = { title: "Subscribers · Mailflow" };
 export default async function SubscribersPage() {
   const broker = await currentBroker();
 
-  const [settlements, deals, suppressions, campaigns, tagRows, tagCounts] =
+  const [settlements, deals, suppressions, campaigns, tagRows, tagCounts, contacts] =
     await Promise.all([
       listSettlements(),
       getSalestrekkerClient().listDeals(),
@@ -46,6 +47,7 @@ export default async function SubscribersPage() {
       repos().campaign.list(),
       repos().contactTag.list(),
       repos().contactTag.counts(),
+      repos().marketingContact.list(),
     ]);
 
   const tags: Record<string, string[]> = {};
@@ -54,7 +56,13 @@ export default async function SubscribersPage() {
   }
   for (const list of Object.values(tags)) list.sort((a, b) => a.localeCompare(b));
 
-  const subscribers = buildSubscribers({ settlements, deals, suppressions });
+  const subscribers = buildSubscribers({ settlements, deals, suppressions, contacts });
+  const ownList = Object.fromEntries(
+    contacts.map((c) => [
+      c.email,
+      { origin: c.origin, consentNote: c.consentNote, addedBy: c.createdBy },
+    ]),
+  );
   const counts = countSubscribers(subscribers);
 
   const campaignNames = new Map(campaigns.map((c) => [c.id, c.name]));
@@ -114,6 +122,7 @@ export default async function SubscribersPage() {
             <Eyebrow className="mb-1.5">Groups</Eyebrow>
             <GroupCount label="Back-book" value={counts.backBook} />
             <GroupCount label="Live pipeline" value={counts.pipeline} />
+            <GroupCount label="Your list" value={counts.added} />
           </div>
         }
       />
@@ -125,7 +134,15 @@ export default async function SubscribersPage() {
           <PageTitle
             title="Subscribers"
             context={`${counts.active} active · ${counts.unsubscribed} unsubscribed · ${counts.bounced} bounced`}
-            actions={<ExportCsvLink href="/api/export/subscribers" />}
+            actions={
+              <div className="flex items-center gap-2">
+                <ExportCsvLink href="/api/export/subscribers" />
+                <AddContacts
+                  brokers={TEAM.filter((m) => m.email).map((m) => ({ id: m.id, name: m.name }))}
+                  defaultBrokerId={TEAM.some((m) => m.id === broker.id) ? broker.id : "mm"}
+                />
+              </div>
+            }
           />
           <SubscriberTable
             subscribers={subscribers}
@@ -138,6 +155,8 @@ export default async function SubscribersPage() {
             allTags={tagCounts}
             onSuppress={suppressManyAction}
             onTag={tagContactsAction}
+            ownList={ownList}
+            onRemoveFromList={removeFromListAction}
             onUntag={untagContactsAction}
           />
         </MailflowContent>

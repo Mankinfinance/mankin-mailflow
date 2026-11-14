@@ -317,7 +317,12 @@ export async function previewAudienceAction(
       sample: mailable.slice(0, 8).map((m) => ({
         name: m.name,
         email: m.email,
-        source: m.sourceKind === "settlements" ? "Back-book" : "Pipeline",
+        source:
+          m.sourceKind === "settlements"
+            ? "Back-book"
+            : m.sourceKind === "deals"
+              ? "Pipeline"
+              : "Your list",
         context: sampleContext(m),
       })),
     },
@@ -347,13 +352,14 @@ function sampleContext(m: {
 async function resolveFor(filter: AudienceFilter) {
   const needsTags =
     filter.includeTags.length > 0 || filter.excludeTags.length > 0;
-  const [settlements, deals, tagRows] = await Promise.all([
+  const [settlements, deals, tagRows, contacts] = await Promise.all([
     filter.sources.includes("settlements") ? listSettlements() : [],
     filter.sources.includes("deals")
       ? getSalestrekkerClient().listDeals()
       : [],
     // Only paid for when the filter actually mentions a tag.
     needsTags ? repos().contactTag.list() : [],
+    filter.sources.includes("contacts") ? repos().marketingContact.list() : [],
   ]);
 
   const tagsByEmail: Record<string, string[]> = {};
@@ -379,6 +385,7 @@ async function resolveFor(filter: AudienceFilter) {
     filter,
     settlements,
     deals,
+    contacts,
     tagsByEmail,
     restrictToEmails,
   });

@@ -23,6 +23,7 @@ import {
   campaignLinkClicks,
   emailSuppressions,
   emailPreferences,
+  marketingContacts,
   automations,
   automationRuns,
   automationSends,
@@ -64,6 +65,8 @@ import {
   type CampaignRecipientRow,
   type NewCampaignRecipient,
   type EmailSuppressionRow,
+  type MarketingContactRow,
+  type NewMarketingContact,
   type NewEmailSuppression,
   type CampaignLinkClickRow,
   type AutomationRow,
@@ -563,6 +566,15 @@ export interface EmailTemplateRepo {
   recordUse(id: string): Promise<void>;
 }
 
+export interface MarketingContactRepo {
+  list(limit?: number): Promise<MarketingContactRow[]>;
+  get(email: string): Promise<MarketingContactRow | null>;
+  /** Insert new addresses; existing ones are left exactly as they are.
+   *  Returns the addresses actually added. */
+  addMany(rows: NewMarketingContact[]): Promise<string[]>;
+  remove(email: string): Promise<void>;
+}
+
 export interface ContactTagRepo {
   /** Every tag row, for building the email -> tags map. */
   list(): Promise<ContactTagRow[]>;
@@ -678,6 +690,7 @@ export interface RepoBundle {
   landingPage: LandingPageRepo;
   emailTemplate: EmailTemplateRepo;
   contactTag: ContactTagRepo;
+  marketingContact: MarketingContactRepo;
   segment: AudienceSegmentRepo;
   settings: MailflowSettingsRepo;
   media: MediaFileRepo;
@@ -2872,6 +2885,57 @@ function realRepos(): RepoBundle {
         }
       },
     },
+    marketingContact: {
+      async list(limit = 20_000) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(marketingContacts)
+            .orderBy(desc(marketingContacts.createdAt))
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async get(email) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select()
+            .from(marketingContacts)
+            .where(eq(marketingContacts.email, email.toLowerCase()))
+            .limit(1);
+          return row ?? null;
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return null;
+        }
+      },
+      async addMany(rows) {
+        if (rows.length === 0) return [];
+        const db = getDb();
+        const added: string[] = [];
+        // Chunked: one statement per 500 keeps the parameter count sane.
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows
+            .slice(i, i + 500)
+            .map((r) => ({ ...r, email: r.email.toLowerCase() }));
+          const inserted = await db
+            .insert(marketingContacts)
+            .values(chunk)
+            .onConflictDoNothing()
+            .returning({ email: marketingContacts.email });
+          added.push(...inserted.map((r) => r.email));
+        }
+        return added;
+      },
+      async remove(email) {
+        const db = getDb();
+        await db.delete(marketingContacts).where(eq(marketingContacts.email, email.toLowerCase()));
+      },
+    },
     contactTag: {
       async list() {
         const db = getDb();
@@ -3399,6 +3463,7 @@ function mockRepos(): RepoBundle {
   const mockRecipientStore = new Map<string, CampaignRecipientRow>();
   const mockSuppressionStore = new Map<string, EmailSuppressionRow>();
   const mockPreferenceStore = new Map<string, string[]>();
+  const mockMarketingContactStore = new Map<string, MarketingContactRow>();
   /** Keyed "<campaignId>:<url>", mirroring the unique index. */
   const mockLinkClickStore = new Map<string, CampaignLinkClickRow>();
   const mockAutomationStore = new Map<string, AutomationRow>();
@@ -4548,6 +4613,40 @@ function mockRepos(): RepoBundle {
           timesUsed: existing.timesUsed + 1,
           lastUsedAt: new Date(),
         });
+      },
+    },
+    marketingContact: {
+      async list(limit = 20_000) {
+        return Array.from(mockMarketingContactStore.values())
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, limit);
+      },
+      async get(email) {
+        return mockMarketingContactStore.get(email.toLowerCase()) ?? null;
+      },
+      async addMany(rows) {
+        const added: string[] = [];
+        for (const r of rows) {
+          const email = r.email.toLowerCase();
+          if (mockMarketingContactStore.has(email)) continue;
+          const now = new Date();
+          mockMarketingContactStore.set(email, {
+            email,
+            name: r.name ?? "",
+            phone: r.phone ?? "",
+            brokerId: r.brokerId ?? "mm",
+            origin: r.origin ?? "manual",
+            consentNote: r.consentNote,
+            createdBy: r.createdBy,
+            createdAt: r.createdAt ?? now,
+            updatedAt: r.updatedAt ?? now,
+          });
+          added.push(email);
+        }
+        return added;
+      },
+      async remove(email) {
+        mockMarketingContactStore.delete(email.toLowerCase());
       },
     },
     contactTag: {

@@ -147,14 +147,18 @@ describe("countSubscribers", () => {
         settlements: [settlement()],
         deals: [deal()],
         suppressions: [suppression()],
+        contacts: [
+          { email: "list@example.com", name: "Jo Park", brokerId: "mm", createdAt: new Date("2026-11-01") },
+        ],
       }),
     );
     expect(counts).toEqual({
-      active: 1,
+      active: 2,
       unsubscribed: 1,
       bounced: 0,
       backBook: 1,
       pipeline: 1,
+      added: 1,
     });
   });
 });

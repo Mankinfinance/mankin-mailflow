@@ -18,7 +18,9 @@ import { z } from "zod";
  *  - settlements: the YBR commission back-book (settled loans)
  *  - deals: the live pipeline
  */
-export const AudienceSourceSchema = z.enum(["settlements", "deals"]);
+/** settlements = the back-book, deals = the pipeline, contacts =
+ *  Mailflow's own list (added by hand or imported). */
+export const AudienceSourceSchema = z.enum(["settlements", "deals", "contacts"]);
 export type AudienceSource = z.infer<typeof AudienceSourceSchema>;
 
 /**

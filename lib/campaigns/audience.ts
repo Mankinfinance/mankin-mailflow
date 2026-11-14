@@ -186,10 +186,46 @@ function dealToMember(deal: Deal): AudienceMember | null {
   };
 }
 
+/** The parts of a marketing_contacts row the audience needs. */
+export interface OwnListContact {
+  email: string;
+  name: string;
+  brokerId: string;
+}
+
+function contactToMember(c: OwnListContact): AudienceMember | null {
+  const email = c.email.trim().toLowerCase();
+  if (!email) return null;
+  const name = c.name.trim();
+  const firstName = firstNameOf(name);
+  return {
+    email,
+    name,
+    firstName,
+    sourceKind: "contacts",
+    sourceId: email,
+    brokerId: c.brokerId,
+    fields: {
+      ...baseFields(c.brokerId),
+      first_name: firstName,
+      last_name: lastNameOf(name),
+      full_name: name,
+      lender: "",
+      loan_status: "",
+      loan_amount: "",
+      current_balance: "",
+      settlement_date: "",
+      years_since_settlement: "",
+    },
+  };
+}
+
 export interface ResolveAudienceInput {
   filter: AudienceFilter;
   settlements: SettlementRow[];
   deals: Deal[];
+  /** Mailflow's own list. Only read when the filter includes "contacts". */
+  contacts?: OwnListContact[];
   /**
    * Tags per lower-cased email. Passed in rather than looked up here so
    * this module stays pure — the tag store is a table, and resolving an
@@ -293,6 +329,16 @@ export function resolveAudience(input: ResolveAudienceInput): ResolvedAudience {
     for (const deal of deals) {
       if (!dealMatches(deal, filter)) continue;
       take(dealToMember(deal));
+    }
+  }
+
+  /* Last, so someone also in the loan book or pipeline is mailed with
+     those merge fields. Only the broker filter applies: the loan and
+     stage filters are about records these contacts don't have. */
+  if (filter.sources.includes("contacts")) {
+    for (const c of input.contacts ?? []) {
+      if (filter.brokerIds.length > 0 && !filter.brokerIds.includes(c.brokerId)) continue;
+      take(contactToMember(c));
     }
   }
 

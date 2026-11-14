@@ -306,3 +306,54 @@ describe("follow-up restriction", () => {
     expect(result.droppedByTag).toBe(1);
   });
 });
+
+describe("your own list as a source", () => {
+  const contacts = [
+    { email: "Seminar@example.com", name: "Jo Park", brokerId: "nb" },
+    { email: "sarah@example.com", name: "Sarah (list)", brokerId: "mm" },
+  ];
+
+  it("is left out unless the campaign includes it", () => {
+    const r = resolveAudience({ filter: filter(), settlements: [], deals: [], contacts, today: TODAY });
+    expect(r.members).toEqual([]);
+  });
+
+  it("merges a name and the owner's details, and no loan fields", () => {
+    const r = resolveAudience({
+      filter: filter({ sources: ["contacts"] }),
+      settlements: [],
+      deals: [],
+      contacts,
+      today: TODAY,
+    });
+    const jo = r.members.find((m) => m.email === "seminar@example.com")!;
+    expect(jo.sourceKind).toBe("contacts");
+    expect(jo.fields.first_name).toBe("Jo");
+    expect(jo.fields.lender).toBe("");
+    expect(jo.brokerId).toBe("nb");
+  });
+
+  it("gives way to the loan book for someone in both", () => {
+    const r = resolveAudience({
+      filter: filter({ sources: ["settlements", "contacts"], loanStatus: ["active", "closed", "discharged"] }),
+      settlements: [settlement({ email: "sarah@example.com" })],
+      deals: [],
+      contacts,
+      today: TODAY,
+    });
+    const sarah = r.members.filter((m) => m.email === "sarah@example.com");
+    expect(sarah).toHaveLength(1);
+    expect(sarah[0].sourceKind).toBe("settlements");
+  });
+
+  it("respects the broker filter", () => {
+    const r = resolveAudience({
+      filter: filter({ sources: ["contacts"], brokerIds: ["mm"] }),
+      settlements: [],
+      deals: [],
+      contacts,
+      today: TODAY,
+    });
+    expect(r.members.map((m) => m.email)).toEqual(["sarah@example.com"]);
+  });
+});

@@ -1019,6 +1019,47 @@ export const emailPreferences = pgTable("email_preferences", {
 export type EmailPreferenceRow = typeof emailPreferences.$inferSelect;
 
 /* -------------------------------------------------------------------------- */
+/* marketing_contacts — people on Mailflow's own list                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Contacts that aren't in the loan book or the pipeline: someone met at
+ * a seminar, a referral partner's client list, a newsletter sign-up.
+ * Added by hand or imported from a CSV, always with a note of how we
+ * have permission to email them, which is the Spam Act's first question.
+ *
+ * A campaign reaches them when "your own list" is one of its sources.
+ * When the same address is also in the loan book or pipeline, that
+ * record wins (it has the loan details for merge fields).
+ */
+export const marketingContacts = pgTable(
+  "marketing_contacts",
+  {
+    /** Lower-cased address. */
+    email: text("email").primaryKey(),
+    name: text("name").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    /** Team member whose name goes on the emails' {{broker_name}}. */
+    brokerId: text("broker_id").notNull().default("mm"),
+    /** manual | import */
+    origin: text("origin").notNull().default("manual"),
+    /** How we have permission, in the adder's words. Required. */
+    consentNote: text("consent_note").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index("marketing_contacts_created_at_idx").on(t.createdAt)],
+);
+
+export type MarketingContactRow = typeof marketingContacts.$inferSelect;
+export type NewMarketingContact = typeof marketingContacts.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
 /* campaign_link_clicks — which link in the email people actually pressed     */
 /* -------------------------------------------------------------------------- */
 

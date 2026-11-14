@@ -41,6 +41,10 @@ export interface SubscriberTableProps {
   onSuppress: (emails: string[]) => Promise<void>;
   onTag: (emails: string[], tag: string) => Promise<void>;
   onUntag: (emails: string[], tag: string) => Promise<void>;
+  /** Details for people on Mailflow's own list, keyed by email. */
+  ownList?: Record<string, { origin: string; consentNote: string; addedBy: string }>;
+  /** Take someone off Mailflow's own list. */
+  onRemoveFromList?: (email: string) => Promise<{ ok: boolean }>;
 }
 
 export function SubscriberTable({
@@ -55,9 +59,11 @@ export function SubscriberTable({
   onSuppress,
   onTag,
   onUntag,
+  ownList = {},
+  onRemoveFromList,
 }: SubscriberTableProps) {
   const [search, setSearch] = React.useState("");
-  const [source, setSource] = React.useState<"all" | "back-book" | "pipeline">("all");
+  const [source, setSource] = React.useState<"all" | "back-book" | "pipeline" | "added">("all");
   const [status, setStatus] = React.useState<"all" | "active" | "unsubscribed" | "bounced">("all");
   const [tag, setTag] = React.useState<string>("all");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -137,6 +143,7 @@ export function SubscriberTable({
               ["all", "All groups"],
               ["back-book", "Back-book"],
               ["pipeline", "Live pipeline"],
+              ["added", "Your list"],
             ]}
           />
           <Select
@@ -361,6 +368,16 @@ export function SubscriberTable({
           onAddTag={(t) => onTag([open.email], t)}
           onRemoveTag={(t) => onUntag([open.email], t)}
           onClose={() => setOpenEmail(null)}
+          ownList={ownList[open.email] ?? null}
+          onRemoveFromList={
+            onRemoveFromList
+              ? async () => {
+                  const r = await onRemoveFromList(open.email);
+                  if (r.ok) setOpenEmail(null);
+                  return r;
+                }
+              : undefined
+          }
         />
       )}
     </div>
@@ -380,7 +397,11 @@ function DetailPanel({
   onAddTag,
   onRemoveTag,
   onClose,
+  ownList,
+  onRemoveFromList,
 }: {
+  ownList: { origin: string; consentNote: string; addedBy: string } | null;
+  onRemoveFromList?: () => Promise<{ ok: boolean }>;
   subscriber: Subscriber;
   brokerName: string;
   stageName: string | null;
@@ -491,6 +512,15 @@ function DetailPanel({
         </button>
       </div>
 
+      {subscriber.source === "added" ? (
+        <OwnListCard
+          brokerName={brokerName}
+          since={subscriber.since}
+          details={ownList}
+          onRemove={onRemoveFromList}
+        />
+      ) : (
+        <>
       {/* The visual centre of the panel — the thing an external platform
           could never show. */}
       <div
@@ -540,6 +570,8 @@ function DetailPanel({
             : "From the live loan pipeline."}
         </p>
       </div>
+        </>
+      )}
 
       {profile && <EngagementPanel profile={profile} sendWindow={sendWindow} />}
 
@@ -619,18 +651,87 @@ function Pair({ label, value }: { label: string; value: string }) {
 }
 
 function SourcePill({ source }: { source: Subscriber["source"] }) {
-  const isBackBook = source === "back-book";
+  const look =
+    source === "back-book"
+      ? { bg: "#f3eee4", ink: "#6a5b3c", label: "Back-book" }
+      : source === "pipeline"
+        ? { bg: "#f6f8ff", ink: "#4151a8", label: "Pipeline" }
+        : { bg: "#eef5f0", ink: "#2f6f4a", label: "Your list" };
   return (
     <span
       className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold"
-      style={
-        isBackBook
-          ? { backgroundColor: "#f3eee4", color: "#6a5b3c" }
-          : { backgroundColor: "#f6f8ff", color: "#4151a8" }
-      }
+      style={{ backgroundColor: look.bg, color: look.ink }}
     >
-      {isBackBook ? "Back-book" : "Pipeline"}
+      {look.label}
     </span>
+  );
+}
+
+/** For someone on Mailflow's own list: who added them, how, and on
+ *  what permission. Shown where a loan record would be. */
+function OwnListCard({
+  brokerName,
+  since,
+  details,
+  onRemove,
+}: {
+  brokerName: string;
+  since: string | null;
+  details: { origin: string; consentNote: string; addedBy: string } | null;
+  onRemove?: () => Promise<{ ok: boolean }>;
+}) {
+  const [pending, start] = React.useTransition();
+  const [failed, setFailed] = React.useState(false);
+  return (
+    <div
+      className="mt-3.5 rounded-[10px] border px-3 py-3"
+      style={{ backgroundColor: "#f3f8f4", borderColor: "#cfe3d5" }}
+    >
+      <span
+        className="text-[10.5px] font-bold uppercase"
+        style={{ letterSpacing: "0.12em", color: "#2f6f4a" }}
+      >
+        On your own list
+      </span>
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
+        <Pair label="Owning broker" value={brokerName} />
+        <Pair
+          label="Added"
+          value={
+            since
+              ? new Date(since).toLocaleDateString("en-AU", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "—"
+          }
+        />
+        <Pair label="How" value={details?.origin === "import" ? "Imported" : "Added by hand"} />
+      </dl>
+      {details?.consentNote && (
+        <p className="mt-2.5 border-t pt-2 text-[11.5px] text-ink-soft" style={{ borderColor: "#cfe3d5" }}>
+          <span className="font-semibold">Permission:</span> {details.consentNote}
+        </p>
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm("Take this person off your list? Their history stays; they just stop being a contact.")) return;
+            start(async () => {
+              const r = await onRemove();
+              setFailed(!r.ok);
+            });
+          }}
+          className="mt-2.5 text-[11.5px] font-semibold text-danger underline underline-offset-2 disabled:opacity-60"
+        >
+          {pending ? "Removing…" : "Remove from your list"}
+        </button>
+      )}
+      {failed && <p className="mt-1 text-[11px] text-danger">That didn&apos;t work. Try again.</p>}
+    </div>
   );
 }
 

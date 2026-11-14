@@ -59,7 +59,7 @@ export interface MailflowEditorProps {
     description: string;
     filter: AudienceFilter;
   }>;
-  sourceCounts: { settlements: number; deals: number };
+  sourceCounts: { settlements: number; deals: number; contacts: number };
   initialPreview: AudiencePreview | null;
   /** The hour the firm's contacts click most, shown beside the
    *  scheduler. Null when there is not enough to say. */

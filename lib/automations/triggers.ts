@@ -20,7 +20,7 @@ export interface TriggerHit {
   email: string;
   name: string;
   firstName: string;
-  sourceKind: "settlements" | "deals";
+  sourceKind: "settlements" | "deals" | "contacts";
   sourceId: string;
   brokerId: string;
   /** Merge values, frozen at entry. */
@@ -97,6 +97,10 @@ export interface EvaluateTriggerInput {
   submissions?: SubmissionHit[];
   /** Tags applied, for kind "tag-added". */
   tagEvents?: TagHit[];
+  /** Mailflow's own list, so a tag on someone outside the loan book and
+   *  pipeline can still start a sequence. */
+  contacts?: Array<{ email: string; name: string; brokerId: string }>;
+  fieldsForContact?: (c: { email: string; name: string; brokerId: string }) => Record<string, string>;
   /** Contacts already in this automation — never enrolled twice. */
   alreadyEnrolled: ReadonlySet<string>;
   /** The do-not-market register. Checked here as well as at send time. */
@@ -180,7 +184,21 @@ export function evaluateTrigger(input: EvaluateTriggerInput): TriggerHit[] {
       const deal = input.deals.find(
         (x) => x.email.trim().toLowerCase() === email,
       );
-      if (!deal) continue;
+      if (!deal) {
+        const contact = input.contacts?.find((c) => c.email.trim().toLowerCase() === email);
+        if (!contact || !input.fieldsForContact) continue;
+        const fields = input.fieldsForContact(contact);
+        hits.push({
+          email,
+          name: contact.name,
+          firstName: fields.first_name ?? "there",
+          sourceKind: "contacts",
+          sourceId: email,
+          brokerId: contact.brokerId,
+          fields,
+        });
+        continue;
+      }
       const fields = input.fieldsForDeal(deal);
       hits.push({
         email,

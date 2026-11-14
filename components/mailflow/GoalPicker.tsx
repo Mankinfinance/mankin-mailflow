@@ -138,7 +138,7 @@ export function GoalPicker({ automationId, current, stages, tags, reached }: Goa
           type="button"
           onClick={save}
           disabled={pending}
-          className="h-[32px] rounded-md bg-navy px-3 text-[12px] font-semibold text-white disabled:opacity-60"
+          className="h-[32px] rounded-md bg-brand px-3 text-[12px] font-semibold text-white disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save goal"}
         </button>

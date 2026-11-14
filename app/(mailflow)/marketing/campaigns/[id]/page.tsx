@@ -121,6 +121,7 @@ export default async function MarketingCampaignPage({
           sourceCounts={{
             settlements: settlements.filter((s) => s.loanStatus === "active").length,
             deals: deals.filter((d) => d.nurturedAt === null).length,
+            contacts: (await repos().marketingContact.list()).length,
           }}
           initialPreview={initial.ok ? initial.preview : null}
           signature={settings.signature}
@@ -299,12 +300,17 @@ function audienceSummary(audience: {
     parts.push(`settled to ${fmt(audience.settledTo)}`);
   }
   if (parts.length === 0) {
+    const names = [
+      audience.sources.includes("settlements") ? "the back-book" : null,
+      audience.sources.includes("deals") ? "the live pipeline" : null,
+      audience.sources.includes("contacts") ? "your own list" : null,
+    ].filter((n): n is string => n !== null);
     parts.push(
-      audience.sources.includes("settlements") && audience.sources.includes("deals")
-        ? "the back-book and the live pipeline"
-        : audience.sources.includes("deals")
-          ? "the live pipeline"
-          : "the back-book",
+      names.length === 0
+        ? "nobody yet"
+        : names.length === 1
+          ? names[0]
+          : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`,
     );
   }
   return parts.join(", ");

@@ -227,7 +227,9 @@ async function enrol(
     );
   }
 
+  let contacts: Array<{ email: string; name: string; brokerId: string }> | undefined;
   if (flow.data.trigger.kind === "tag-added") {
+    contacts = await repos().marketingContact.list();
     const rows = await repos().contactTag.list();
     tagEvents = rows.map((r) => ({
       email: r.email,
@@ -246,6 +248,15 @@ async function enrol(
     today: now,
     submissions,
     tagEvents,
+    contacts,
+    fieldsForContact: (c) =>
+      resolveAudience({
+        filter: { ...defaultAudienceFilter(), sources: ["contacts"] },
+        settlements: [],
+        deals: [],
+        contacts: [c],
+        today: now,
+      }).members[0]?.fields ?? {},
     alreadyEnrolled,
     suppressed,
     fieldsForSettlement: (s) =>

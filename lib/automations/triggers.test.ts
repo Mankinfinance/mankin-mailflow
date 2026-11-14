@@ -328,6 +328,24 @@ describe("the tag-added trigger", () => {
     expect(hits[0].sourceKind).toBe("settlements");
   });
 
+  it("reaches someone on your own list when they're nowhere else", () => {
+    const hits = evaluateTrigger({
+      ...base,
+      trigger: { kind: "tag-added", tag: "Refinance watch" },
+      settlements: [],
+      deals: [],
+      tagEvents: [tagged({ email: "seminar@example.com" })],
+      contacts: [{ email: "seminar@example.com", name: "Jo Park", brokerId: "nb" }],
+      fieldsForContact: (c) => ({ first_name: c.name.split(" ")[0] }),
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      sourceKind: "contacts",
+      brokerId: "nb",
+      firstName: "Jo",
+    });
+  });
+
   it("ignores a different tag", () => {
     const hits = evaluateTrigger({
       ...base,

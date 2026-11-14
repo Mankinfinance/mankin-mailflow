@@ -36,17 +36,18 @@ export default async function MailflowSettingsPage() {
   /* Each source falls back on its own, so this page (and the Set up the
      tables button on it) still opens when the database is behind. */
   const { load, failures } = createLoader({ heal: migrateOnce });
-  const [settings, settlements, deals, suppressions, storedRow] =
+  const [settings, settlements, deals, suppressions, storedRow, contacts] =
     await Promise.all([
       currentSettings(),
       load("Settled clients", () => listSettlements(), []),
       load("Deals", () => getSalestrekkerClient().listDeals(), []),
       load("Unsubscribes", () => repos().campaign.listSuppressions(5000), []),
       load("Saved settings", () => repos().settings.get(), null),
+      load("Your own list", () => repos().marketingContact.list(), []),
     ]);
 
   const counts = countSubscribers(
-    buildSubscribers({ settlements, deals, suppressions }),
+    buildSubscribers({ settlements, deals, suppressions, contacts }),
   );
 
   /* Which values the store has not taken over yet, so the form can name

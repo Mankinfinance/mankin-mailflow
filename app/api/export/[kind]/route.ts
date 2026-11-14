@@ -45,19 +45,20 @@ export async function GET(
   const { kind } = await params;
 
   if (kind === "subscribers") {
-    const [settlements, deals, suppressions, tagRows] = await Promise.all([
+    const [settlements, deals, suppressions, tagRows, contacts] = await Promise.all([
       listSettlements(),
       getSalestrekkerClient().listDeals(),
       repos().campaign.listSuppressions(100_000),
       repos().contactTag.list(),
+      repos().marketingContact.list(),
     ]);
     const tags = new Map<string, string[]>();
     for (const row of tagRows) tags.set(row.email, [...(tags.get(row.email) ?? []), row.tag]);
-    const subscribers = buildSubscribers({ settlements, deals, suppressions });
+    const subscribers = buildSubscribers({ settlements, deals, suppressions, contacts });
     const rows = subscribers.map((s) => [
       s.email,
       s.name,
-      s.source === "back-book" ? "Back-book" : "Pipeline",
+      s.source === "back-book" ? "Back-book" : s.source === "pipeline" ? "Pipeline" : "Your list",
       s.status,
       s.since,
       teamMember(s.brokerId)?.name ?? s.brokerId,

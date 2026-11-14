@@ -6,6 +6,9 @@ import { canAccessAdmin } from "@/lib/auth/permissions";
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
 import { buildHistoryEvents } from "@/lib/campaigns/subscribers";
+import { isEmail } from "@/lib/contacts-import";
+import { TEAM } from "@/lib/team";
+import type { NewMarketingContact } from "@/lib/db/schema";
 
 /**
  * Tagging.
@@ -118,4 +121,123 @@ export async function contactHistoryAction(
     surveyNames: new Map(surveys.map((s) => [s.id, s.name])),
   });
   return { ok: true, events: events.map((e) => ({ ...e, at: e.at.toISOString() })) };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mailflow's own list                                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface AddContactsResult {
+  ok: true;
+  added: number;
+  /** Already on your list: left exactly as they were. */
+  alreadyOnList: number;
+  /** On the do-not-market register: added, but they stay unsubscribed. */
+  suppressed: number;
+  /** Rows the server refused (no valid address). */
+  rejected: number;
+}
+
+/**
+ * Add people to Mailflow's own list, one by hand or a whole import.
+ *
+ * Every add carries a note of how we have permission to email them:
+ * the Spam Act's first question, and the one nobody can answer about
+ * an old spreadsheet a year later unless it was written down now.
+ * Someone on the do-not-market register is still added (so the list is
+ * complete) but stays unsubscribed: an import can never undo an opt-out.
+ */
+export async function addContactsAction(input: {
+  rows: Array<{ email: string; name?: string; phone?: string }>;
+  consentNote: string;
+  brokerId: string;
+  origin: "manual" | "import";
+}): Promise<AddContactsResult | { ok: false; error: string }> {
+  const broker = await currentBroker();
+  if (!(await canAccessAdmin(broker.id))) {
+    return { ok: false, error: "Admin access required to add contacts." };
+  }
+  if (!Array.isArray(input.rows) || input.rows.length === 0) {
+    return { ok: false, error: "There's nobody to add." };
+  }
+  if (input.rows.length > 5000) {
+    return { ok: false, error: "Import up to 5,000 at a time." };
+  }
+  const consentNote = String(input.consentNote ?? "").replace(/\s+/g, " ").trim();
+  if (consentNote.length < 5) {
+    return { ok: false, error: "Say how you have permission to email them, e.g. \"Signed up at the March seminar\"." };
+  }
+  if (consentNote.length > 300) {
+    return { ok: false, error: "Keep the permission note under 300 characters." };
+  }
+  if (!TEAM.some((m) => m.id === input.brokerId)) {
+    return { ok: false, error: "Choose whose contacts these are." };
+  }
+  const origin = input.origin === "import" ? "import" : "manual";
+
+  const seen = new Set<string>();
+  const clean: NewMarketingContact[] = [];
+  let rejected = 0;
+  for (const r of input.rows) {
+    const email = String(r?.email ?? "").trim().toLowerCase();
+    if (!isEmail(email) || email.length > 254) {
+      rejected += 1;
+      continue;
+    }
+    if (seen.has(email)) continue;
+    seen.add(email);
+    clean.push({
+      email,
+      name: String(r.name ?? "").replace(/\s+/g, " ").trim().slice(0, 120),
+      phone: String(r.phone ?? "").trim().slice(0, 40),
+      brokerId: input.brokerId,
+      origin,
+      consentNote,
+      createdBy: broker.id,
+    });
+  }
+  if (clean.length === 0) {
+    return { ok: false, error: "None of those are valid email addresses." };
+  }
+
+  const added = await repos().marketingContact.addMany(clean);
+  const suppressed = await repos().campaign.suppressedAmong(added);
+
+  await auditLog({
+    actor: { type: "broker", id: broker.id },
+    action: origin === "import" ? "contacts.import" : "contacts.add",
+    meta: {
+      added: added.length,
+      alreadyOnList: clean.length - added.length,
+      rejected,
+      suppressed: suppressed.size,
+      brokerId: input.brokerId,
+      consentNote,
+    },
+  });
+  revalidatePath("/marketing/subscribers");
+  return {
+    ok: true,
+    added: added.length,
+    alreadyOnList: clean.length - added.length,
+    suppressed: suppressed.size,
+    rejected,
+  };
+}
+
+/** Take someone off Mailflow's own list. Their tags, history and any
+ *  opt-out stay; they just stop being a contact. */
+export async function removeFromListAction(email: string): Promise<{ ok: boolean }> {
+  const broker = await currentBroker();
+  if (!(await canAccessAdmin(broker.id))) return { ok: false };
+  const address = String(email ?? "").trim().toLowerCase();
+  if (!address) return { ok: false };
+  await repos().marketingContact.remove(address);
+  await auditLog({
+    actor: { type: "broker", id: broker.id },
+    action: "contacts.remove",
+    meta: { email: address },
+  });
+  revalidatePath("/marketing/subscribers");
+  return { ok: true };
 }

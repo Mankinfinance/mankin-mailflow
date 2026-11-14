@@ -171,13 +171,14 @@ export const TOOLS = {
     },
     input: z.object({}),
     run: async () => {
-      const [settlements, deals, suppressions] = await Promise.all([
+      const [settlements, deals, suppressions, contacts] = await Promise.all([
         listSettlements(),
         getSalestrekkerClient().listDeals(),
         repos().campaign.listSuppressions(5000),
+        repos().marketingContact.list(),
       ]);
       const counts = countSubscribers(
-        buildSubscribers({ settlements, deals, suppressions }),
+        buildSubscribers({ settlements, deals, suppressions, contacts }),
       );
       const byReason: Record<string, number> = {};
       for (const s of suppressions) {

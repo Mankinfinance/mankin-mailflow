@@ -225,6 +225,13 @@
       "when": 1794633758820,
       "tag": "0031_smooth_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794634149025,
+      "tag": "0032_lush_blindfold",
+      "breakpoints": true
     }
   ]
 }

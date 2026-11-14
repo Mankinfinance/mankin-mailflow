@@ -17,7 +17,7 @@ import type { CampaignRecipientRow, EmailSuppressionRow } from "@/lib/db/schema"
  * record we do not hold and could not produce if asked for it.
  */
 
-export type SubscriberSource = "back-book" | "pipeline";
+export type SubscriberSource = "back-book" | "pipeline" | "added";
 export type SubscriberStatus = "active" | "unsubscribed" | "bounced";
 
 export interface Subscriber {
@@ -49,6 +49,7 @@ export interface SubscriberCounts {
   bounced: number;
   backBook: number;
   pipeline: number;
+  added: number;
 }
 
 /**
@@ -60,6 +61,8 @@ export function buildSubscribers(input: {
   settlements: SettlementRow[];
   deals: Deal[];
   suppressions: EmailSuppressionRow[];
+  /** Mailflow's own list. Last, so a loan or deal record wins. */
+  contacts?: Array<{ email: string; name: string; brokerId: string; createdAt: Date }>;
 }): Subscriber[] {
   const statusByEmail = new Map<string, SubscriberStatus>();
   for (const s of input.suppressions) {
@@ -118,6 +121,29 @@ export function buildSubscribers(input: {
     });
   }
 
+  for (const c of input.contacts ?? []) {
+    const email = c.email.trim().toLowerCase();
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+    out.push({
+      email,
+      name: c.name || email,
+      source: "added",
+      sourceId: email,
+      status: statusByEmail.get(email) ?? "active",
+      since: c.createdAt.toISOString().slice(0, 10),
+      brokerId: c.brokerId,
+      loan: {
+        lender: "",
+        settledOn: null,
+        currentBalance: null,
+        loanAmount: null,
+        loanStatus: null,
+        stageId: null,
+      },
+    });
+  }
+
   return out;
 }
 
@@ -128,6 +154,7 @@ export function countSubscribers(subscribers: Subscriber[]): SubscriberCounts {
     bounced: subscribers.filter((s) => s.status === "bounced").length,
     backBook: subscribers.filter((s) => s.source === "back-book").length,
     pipeline: subscribers.filter((s) => s.source === "pipeline").length,
+    added: subscribers.filter((s) => s.source === "added").length,
   };
 }
 

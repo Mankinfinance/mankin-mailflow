@@ -29,7 +29,7 @@ export interface AudienceSentenceProps {
   lenderCodes: string[];
   stages: Array<{ id: string; label: string }>;
   /** Source sizes, shown on the toggle cards. */
-  counts: { settlements: number; deals: number };
+  counts: { settlements: number; deals: number; contacts?: number };
   /** Every tag in use, with how many contacts carry it. */
   allTags: Array<{ tag: string; count: number }>;
   /** Saved segments, offered as starting points. */
@@ -60,7 +60,7 @@ export function AudienceSentence({
   const backBookOn = value.sources.includes("settlements");
   const pipelineOn = value.sources.includes("deals");
 
-  function toggleSource(source: "settlements" | "deals") {
+  function toggleSource(source: "settlements" | "deals" | "contacts") {
     onChange({
       sources: value.sources.includes(source)
         ? value.sources.filter((s) => s !== source)
@@ -122,6 +122,12 @@ export function AudienceSentence({
             label="the live pipeline"
             count={`${counts.deals} applications`}
             onClick={() => toggleSource("deals")}
+          />
+          <SourceCard
+            checked={value.sources.includes("contacts")}
+            label="your own list"
+            count={`${counts.contacts ?? 0} added or imported`}
+            onClick={() => toggleSource("contacts")}
           />
         </div>
       </Clause>
