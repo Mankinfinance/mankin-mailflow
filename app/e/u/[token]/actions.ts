@@ -4,6 +4,8 @@ import { verifyTrackingToken } from "@/lib/campaigns/tracking";
 import { recordUnsubscribe } from "@/lib/campaigns/unsubscribe";
 import { repos } from "@/lib/db/repos";
 import { UNSUBSCRIBE_REASONS } from "@/lib/campaigns/unsubscribe-reasons";
+import { currentSettings } from "@/lib/mailflow/current-settings";
+import { auditLog } from "@/lib/audit";
 
 /**
  * Honour an unsubscribe. Called from the confirm button on the landing
@@ -59,6 +61,35 @@ export async function saveUnsubscribeFeedbackAction(
     return { ok: saved };
   } catch (err) {
     console.error("[unsubscribe feedback] failed", err);
+    return { ok: false };
+  }
+}
+
+/**
+ * Opt down rather than out: keep the topics they still want. Anything
+ * not in `keep` is turned off. Unknown ids are ignored, so a stale page
+ * can't store topics that no longer exist.
+ */
+export async function savePreferencesAction(
+  token: string,
+  keep: string[],
+): Promise<{ ok: boolean }> {
+  const verified = await verifyTrackingToken(token, "unsubscribe");
+  if (!verified.ok) return { ok: false };
+  if (!Array.isArray(keep) || keep.length > 50) return { ok: false };
+  try {
+    const { topics } = await currentSettings();
+    const wanted = new Set(keep.filter((k) => typeof k === "string"));
+    const optedOut = topics.map((t) => t.id).filter((id) => !wanted.has(id));
+    await repos().campaign.setTopicOptOuts(verified.claims.em, optedOut);
+    await auditLog({
+      actor: { type: "system" },
+      action: "preferences.update",
+      meta: { optedOut },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[preferences] failed", err);
     return { ok: false };
   }
 }

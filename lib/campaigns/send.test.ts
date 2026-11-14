@@ -129,6 +129,34 @@ describe("dispatchCampaignBatch", () => {
     expect(skipped?.skipReason).toBe("suppressed");
   });
 
+  it("skips someone who turned the campaign's topic off, and only them", async () => {
+    const campaign = await makeCampaign({ topicId: "market" });
+    await repos().campaign.setRecipients(campaign.id, [
+      recipient("less@example.com"),
+      recipient("other-topic@example.com"),
+      recipient("all@example.com"),
+    ]);
+    await repos().campaign.setTopicOptOuts("less@example.com", ["market"]);
+    await repos().campaign.setTopicOptOuts("other-topic@example.com", ["events"]);
+
+    const result = await dispatchCampaignBatch(campaign);
+
+    expect(result).toMatchObject({ sent: 2, skipped: 1 });
+    const skipped = await repos().campaign.findRecipient(campaign.id, "less@example.com");
+    expect(skipped?.status).toBe("skipped");
+    expect(skipped?.skipReason).toBe("topic");
+  });
+
+  it("ignores topic choices on a campaign without a topic", async () => {
+    const campaign = await makeCampaign();
+    await repos().campaign.setRecipients(campaign.id, [recipient("picky@example.com")]);
+    await repos().campaign.setTopicOptOuts("picky@example.com", ["market", "events"]);
+
+    const result = await dispatchCampaignBatch(campaign);
+
+    expect(result).toMatchObject({ sent: 1, skipped: 0 });
+  });
+
   it("records a failure against the recipient and carries on", async () => {
     const campaign = await makeCampaign();
     await repos().campaign.setRecipients(campaign.id, [

@@ -802,6 +802,9 @@ export const campaigns = pgTable(
     /** Preview text shown after the subject in the inbox. Merge fields
      *  allowed. Empty means the client shows the body's first words. */
     preheader: text("preheader").notNull().default(""),
+    /** Topic from Settings (e.g. "rate-news"), or null for none. People
+     *  who opted out of the topic are skipped. */
+    topicId: text("topic_id"),
     /** Body in the app's light markup (see lib/campaigns/merge.ts). */
     body: text("body").notNull().default(""),
 
@@ -992,6 +995,28 @@ export const emailSuppressions = pgTable(
 
 export type EmailSuppressionRow = typeof emailSuppressions.$inferSelect;
 export type NewEmailSuppression = typeof emailSuppressions.$inferInsert;
+
+/* -------------------------------------------------------------------------- */
+/* email_preferences — the topics someone has opted out of                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "Fewer emails, not none." Someone who only wants rate news can turn
+ * off the rest from the unsubscribe page instead of leaving entirely.
+ * A campaign with a topic skips everyone who has opted out of it.
+ * Being on the suppression register still beats everything here.
+ */
+export const emailPreferences = pgTable("email_preferences", {
+  /** Lower-cased address. */
+  email: text("email").primaryKey(),
+  /** Topic ids (from Settings) they don't want. */
+  optedOutTopics: jsonb("opted_out_topics").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export type EmailPreferenceRow = typeof emailPreferences.$inferSelect;
 
 /* -------------------------------------------------------------------------- */
 /* campaign_link_clicks — which link in the email people actually pressed     */

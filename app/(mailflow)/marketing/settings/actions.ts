@@ -98,6 +98,8 @@ export async function saveSettingsAction(input: unknown): Promise<Result> {
       unsubscribeMailtoBefore: stored.unsubscribeMailto,
       trackOpensByDefault: settings.trackOpensByDefault,
       trackClicksByDefault: settings.trackClicksByDefault,
+      topics: settings.topics.map((t) => t.id),
+      topicsBefore: stored.topics.map((t) => t.id),
     },
   });
 

@@ -218,6 +218,13 @@
       "when": 1794633363325,
       "tag": "0030_absent_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794633758820,
+      "tag": "0031_smooth_blur",
+      "breakpoints": true
     }
   ]
 }

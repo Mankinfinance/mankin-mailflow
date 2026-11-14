@@ -1,5 +1,6 @@
 import "server-only";
 import { repos } from "@/lib/db/repos";
+import { blockedForCampaign } from "./preferences";
 import { emitWebhook } from "@/lib/webhooks/dispatch";
 import { auditLog } from "@/lib/audit";
 import { teamMember } from "@/lib/team";
@@ -132,8 +133,9 @@ export async function dispatchCampaignBatch(
   let skipped = 0;
 
   if (batch.length > 0) {
-    const suppressed = await campaignRepo.suppressedAmong(
+    const { suppressed, optedOut } = await blockedForCampaign(
       batch.map((r) => r.email),
+      campaign.topicId,
     );
 
     if (campaign.startedAt === null) {
@@ -148,6 +150,17 @@ export async function dispatchCampaignBatch(
         await campaignRepo.updateRecipient(recipient.id, {
           status: "skipped",
           skipReason: "suppressed",
+        });
+        skipped += 1;
+        continue;
+      }
+      /* Opted down: they still want some of our emails, just not this
+         topic. Checked at send as well as when the audience was frozen,
+         since they can change it in between. */
+      if (optedOut.has(recipient.email)) {
+        await campaignRepo.updateRecipient(recipient.id, {
+          status: "skipped",
+          skipReason: "topic",
         });
         skipped += 1;
         continue;

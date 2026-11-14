@@ -110,6 +110,9 @@ export function ReachRail({
                   {preview.suppressed > 0 && (
                     <div>− {preview.suppressed} on the do-not-market list</div>
                   )}
+                  {preview.optedOut > 0 && (
+                    <div>− {preview.optedOut} turned this topic off</div>
+                  )}
                   {preview.droppedNoEmail > 0 && (
                     <div>− {preview.droppedNoEmail} with no email on file</div>
                   )}

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { currentBroker } from "@/lib/auth/current-broker";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { repos } from "@/lib/db/repos";
+import { blockedForCampaign } from "@/lib/campaigns/preferences";
 import { auditLog } from "@/lib/audit";
+import { currentSettings } from "@/lib/mailflow/current-settings";
 import { getSalestrekkerClient } from "@/lib/clients/salestrekker";
 import { listSettlements } from "@/lib/settlements-store";
 import { TEAM, teamMember } from "@/lib/team";
@@ -93,6 +95,8 @@ export interface CampaignDraftInput {
   audience: unknown;
   trackOpens: boolean;
   trackClicks: boolean;
+  /** A topic id from Settings, or empty for none. */
+  topicId?: string;
 }
 
 export async function saveCampaignAction(
@@ -138,6 +142,10 @@ export async function saveCampaignAction(
   if (input.body.length > 100_000) {
     return { ok: false, error: "That email is too long to send." };
   }
+  const topicId = (input.topicId ?? "").trim() || null;
+  if (topicId && !(await currentSettings()).topics.some((t) => t.id === topicId)) {
+    return { ok: false, error: "That topic no longer exists. Pick another in the send settings." };
+  }
 
   await repos().campaign.update(input.id, {
     name: input.name.trim(),
@@ -152,6 +160,7 @@ export async function saveCampaignAction(
     audience: parsed.data,
     trackOpens: input.trackOpens,
     trackClicks: input.trackClicks,
+    topicId,
   });
   /* Who changed what goes out to clients. The body itself is in the
      campaign; the log records that it changed, and the things that
@@ -167,6 +176,7 @@ export async function saveCampaignAction(
       subjectChanged: input.subject !== campaign.subject,
       bodyChanged: input.body !== campaign.body,
       audience: parsed.data,
+      topicId,
     },
   });
 
@@ -194,6 +204,7 @@ export async function duplicateCampaignAction(
     name: `${original.name} (copy)`.slice(0, 200),
     subject: original.subject,
     preheader: original.preheader ?? "",
+    topicId: original.topicId ?? null,
     body: original.body,
     status: "draft",
     audience: original.audience,
@@ -253,6 +264,8 @@ export interface AudiencePreview {
   droppedDuplicate: number;
   /** Matched, but on the do-not-market list. */
   suppressed: number;
+  /** Matched, but opted out of this campaign's topic. */
+  optedOut: number;
   /** First few recipients, so the broker can sanity-check the segment. */
   sample: Array<{
     name: string;
@@ -270,6 +283,7 @@ export interface AudiencePreview {
  */
 export async function previewAudienceAction(
   filter: unknown,
+  topicId?: string | null,
 ): Promise<Result<{ preview: AudiencePreview }>> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth;
@@ -280,10 +294,13 @@ export async function previewAudienceAction(
   }
 
   const resolved = await resolveFor(parsed.data);
-  const suppressed = await repos().campaign.suppressedAmong(
+  const { suppressed, optedOut } = await blockedForCampaign(
     resolved.members.map((m) => m.email),
+    typeof topicId === "string" && topicId ? topicId : null,
   );
-  const mailable = resolved.members.filter((m) => !suppressed.has(m.email));
+  const mailable = resolved.members.filter(
+    (m) => !suppressed.has(m.email) && !optedOut.has(m.email),
+  );
 
   return {
     ok: true,
@@ -296,6 +313,7 @@ export async function previewAudienceAction(
       droppedNoEmail: resolved.droppedNoEmail,
       droppedDuplicate: resolved.droppedDuplicate,
       suppressed: suppressed.size,
+      optedOut: [...optedOut].filter((e) => !suppressed.has(e)).length,
       sample: mailable.slice(0, 8).map((m) => ({
         name: m.name,
         email: m.email,
@@ -489,10 +507,13 @@ export async function startCampaignAction(
 
   const filter = AudienceFilterSchema.parse(campaign.audience);
   const resolved = await resolveFor(filter);
-  const suppressed = await repos().campaign.suppressedAmong(
+  const { suppressed, optedOut } = await blockedForCampaign(
     resolved.members.map((m) => m.email),
+    campaign.topicId,
   );
-  const mailable = resolved.members.filter((m) => !suppressed.has(m.email));
+  const mailable = resolved.members.filter(
+    (m) => !suppressed.has(m.email) && !optedOut.has(m.email),
+  );
   if (mailable.length === 0) {
     return { ok: false, error: "This audience reaches nobody." };
   }

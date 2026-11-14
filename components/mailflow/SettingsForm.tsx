@@ -127,6 +127,18 @@ export function SettingsForm({
         />
       </Card>
 
+      {/* ── Topics ── */}
+      <Card>
+        <Eyebrow>Topics</Eyebrow>
+        <p className="mb-3 mt-1 text-[12px] leading-relaxed text-ink-mute">
+          What a campaign can be about. The unsubscribe page lists these, so
+          someone can turn off the ones they don&apos;t want instead of leaving
+          altogether, and a campaign with a topic skips them. Renaming is safe;
+          removing one stops it being offered.
+        </p>
+        <TopicsEditor topics={draft.topics} onChange={(topics) => patch({ topics })} />
+      </Card>
+
       {/* ── Pace ── */}
       <Card>
         <Eyebrow>Send pace</Eyebrow>
@@ -256,6 +268,87 @@ function Toggle({
           {hint}
         </span>
       </span>
+    </div>
+  );
+}
+
+function slugFor(label: string, taken: Set<string>): string {
+  const base =
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "topic";
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+function TopicsEditor({
+  topics,
+  onChange,
+}: {
+  topics: MailflowSettings["topics"];
+  onChange: (next: MailflowSettings["topics"]) => void;
+}) {
+  const [adding, setAdding] = React.useState("");
+
+  function add() {
+    const label = adding.trim();
+    if (!label || topics.length >= 12) return;
+    const id = slugFor(label, new Set(topics.map((t) => t.id)));
+    onChange([...topics, { id, label: label.slice(0, 60) }]);
+    setAdding("");
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {topics.map((t, i) => (
+        <div key={t.id} className="flex items-center gap-2">
+          <input
+            aria-label={`Topic ${i + 1}`}
+            value={t.label}
+            maxLength={60}
+            onChange={(e) =>
+              onChange(topics.map((x) => (x.id === t.id ? { ...x, label: e.target.value } : x)))
+            }
+            className="h-[32px] min-w-0 flex-1 rounded-md border border-hairline bg-surface px-2.5 text-[12.5px] text-ink"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(topics.filter((x) => x.id !== t.id))}
+            className="h-[32px] rounded-md border border-hairline px-2.5 text-[11.5px] text-ink-mute hover:text-ink"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      {topics.length < 12 && (
+        <div className="flex items-center gap-2 pt-1">
+          <input
+            aria-label="New topic"
+            value={adding}
+            maxLength={60}
+            placeholder="Add a topic, e.g. First home buyers"
+            onChange={(e) => setAdding(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
+            }}
+            className="h-[32px] min-w-0 flex-1 rounded-md border border-hairline bg-surface px-2.5 text-[12.5px] text-ink placeholder:text-ink-faint"
+          />
+          <button
+            type="button"
+            onClick={add}
+            disabled={!adding.trim()}
+            className="h-[32px] rounded-md border border-hairline px-2.5 text-[11.5px] font-semibold text-ink disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -83,6 +83,24 @@ export const SignatureSchema = z.object({
 
 export type SignatureSettings = z.infer<typeof SignatureSchema>;
 
+/**
+ * What a campaign is about, so people can opt down rather than out.
+ * The id is what's stored against a campaign and a person's
+ * preferences, so it never changes once made; the label can.
+ */
+export const TopicSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]{1,40}$/),
+  label: z.string().trim().min(1).max(60),
+});
+export type Topic = z.infer<typeof TopicSchema>;
+
+export const DEFAULT_TOPICS: Topic[] = [
+  { id: "rate-news", label: "Rate news and lender changes" },
+  { id: "market", label: "Property market updates" },
+  { id: "guides", label: "Guides and tips" },
+  { id: "events", label: "Events and webinars" },
+];
+
 export const MailflowSettingsSchema = z.object({
   /**
    * Postal address printed in the campaign footer. The broker signature
@@ -118,6 +136,14 @@ export const MailflowSettingsSchema = z.object({
   batchSize: z.number().int().min(MIN_BATCH).max(MAX_BATCH).default(BATCH_SIZE),
 
   signature: SignatureSchema.default(SignatureSchema.parse({})),
+
+  /** Topics a campaign can be about. Empty turns the preference
+   *  choices off the unsubscribe page. */
+  topics: z
+    .array(TopicSchema)
+    .max(12)
+    .refine((t) => new Set(t.map((x) => x.id)).size === t.length, "Each topic needs its own id.")
+    .default(DEFAULT_TOPICS),
 });
 
 export type MailflowSettings = z.infer<typeof MailflowSettingsSchema>;

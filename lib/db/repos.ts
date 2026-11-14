@@ -22,6 +22,7 @@ import {
   campaignRecipients,
   campaignLinkClicks,
   emailSuppressions,
+  emailPreferences,
   automations,
   automationRuns,
   automationSends,
@@ -449,6 +450,13 @@ export interface CampaignRepo {
   /** Which of these addresses are suppressed. Batched so the sender can
    *  check a whole campaign in one query. */
   suppressedAmong(emails: string[]): Promise<Set<string>>;
+
+  /* ---- topic preferences (opt down rather than out) ---- */
+  /** Topic ids this address has opted out of. Empty when none. */
+  topicOptOuts(email: string): Promise<string[]>;
+  setTopicOptOuts(email: string, topicIds: string[]): Promise<void>;
+  /** Which of these addresses have opted out of this topic. */
+  optedOutOfTopic(topicId: string, emails: string[]): Promise<Set<string>>;
 }
 
 /** Per-node counts for the automation canvas. */
@@ -2219,6 +2227,52 @@ function realRepos(): RepoBundle {
           .returning({ email: emailSuppressions.email });
         return rows.length > 0;
       },
+      async topicOptOuts(email) {
+        const db = getDb();
+        try {
+          const [row] = await db
+            .select({ topics: emailPreferences.optedOutTopics })
+            .from(emailPreferences)
+            .where(eq(emailPreferences.email, email.toLowerCase()))
+            .limit(1);
+          return row?.topics ?? [];
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
+      async setTopicOptOuts(email, topicIds) {
+        const db = getDb();
+        const lowered = email.toLowerCase();
+        const topics = [...new Set(topicIds)];
+        await db
+          .insert(emailPreferences)
+          .values({ email: lowered, optedOutTopics: topics, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: emailPreferences.email,
+            set: { optedOutTopics: topics, updatedAt: new Date() },
+          });
+      },
+      async optedOutOfTopic(topicId, emails) {
+        if (emails.length === 0) return new Set<string>();
+        const db = getDb();
+        const lowered = emails.map((e) => e.toLowerCase());
+        try {
+          const rows = await db
+            .select({ email: emailPreferences.email })
+            .from(emailPreferences)
+            .where(
+              and(
+                inArray(emailPreferences.email, lowered),
+                sql`${emailPreferences.optedOutTopics} @> ${JSON.stringify([topicId])}::jsonb`,
+              ),
+            );
+          return new Set(rows.map((r) => r.email));
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return new Set<string>();
+        }
+      },
       async suppressedAmong(emails) {
         if (emails.length === 0) return new Set<string>();
         const db = getDb();
@@ -3344,6 +3398,7 @@ function mockRepos(): RepoBundle {
    *  one-email-per-campaign rule the unique index does in Postgres. */
   const mockRecipientStore = new Map<string, CampaignRecipientRow>();
   const mockSuppressionStore = new Map<string, EmailSuppressionRow>();
+  const mockPreferenceStore = new Map<string, string[]>();
   /** Keyed "<campaignId>:<url>", mirroring the unique index. */
   const mockLinkClickStore = new Map<string, CampaignLinkClickRow>();
   const mockAutomationStore = new Map<string, AutomationRow>();
@@ -3868,6 +3923,7 @@ function mockRepos(): RepoBundle {
           name: row.name,
           subject: row.subject ?? "",
           preheader: row.preheader ?? "",
+          topicId: row.topicId ?? null,
           body: row.body ?? "",
           status: row.status ?? "draft",
           audience: row.audience,
@@ -4098,6 +4154,20 @@ function mockRepos(): RepoBundle {
         return Array.from(mockSuppressionStore.values())
           .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
           .slice(0, limit);
+      },
+      async topicOptOuts(email) {
+        return [...(mockPreferenceStore.get(email.toLowerCase()) ?? [])];
+      },
+      async setTopicOptOuts(email, topicIds) {
+        mockPreferenceStore.set(email.toLowerCase(), [...new Set(topicIds)]);
+      },
+      async optedOutOfTopic(topicId, emails) {
+        const out = new Set<string>();
+        for (const email of emails) {
+          const lowered = email.toLowerCase();
+          if (mockPreferenceStore.get(lowered)?.includes(topicId)) out.add(lowered);
+        }
+        return out;
       },
       async suppressedAmong(emails) {
         const out = new Set<string>();

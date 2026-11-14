@@ -46,6 +46,9 @@ export function CampaignReport({
 }: CampaignReportProps) {
   const failed = problems.filter((p) => p.status === "failed").length;
   const skipped = problems.filter((p) => p.status === "skipped").length;
+  const topicSkipped = problems.filter(
+    (p) => p.status === "skipped" && p.skipReason === "topic",
+  ).length;
 
   return (
     <div className="space-y-3.5">
@@ -135,7 +138,8 @@ export function CampaignReport({
           <Eyebrow>Did not send</Eyebrow>
           <p className="mt-1 mb-2.5 text-[11px] text-ink-mute">
             {failed} failed
-            {skipped > 0 ? `, ${skipped} suppressed` : ""} — normal at this
+            {skipped - topicSkipped > 0 ? `, ${skipped - topicSkipped} suppressed` : ""}
+            {topicSkipped > 0 ? `, ${topicSkipped} turned this topic off` : ""} — normal at this
             volume.
           </p>
           <div className="space-y-2.5">
@@ -155,7 +159,9 @@ export function CampaignReport({
                 </div>
                 <p className="mt-1 text-[11px] text-ink-mute">
                   {p.status === "skipped"
-                    ? "On the do-not-market list"
+                    ? p.skipReason === "topic"
+                      ? "Turned this topic off on their preferences page"
+                      : "On the do-not-market list"
                     : "The mail server rejected this address"}
                 </p>
                 <p

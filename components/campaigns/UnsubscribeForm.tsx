@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check } from "lucide-react";
 import {
   confirmUnsubscribeAction,
+  savePreferencesAction,
   saveUnsubscribeFeedbackAction,
 } from "@/app/e/u/[token]/actions";
 import { UNSUBSCRIBE_REASONS } from "@/lib/campaigns/unsubscribe-reasons";
@@ -26,9 +27,13 @@ import { UNSUBSCRIBE_REASONS } from "@/lib/campaigns/unsubscribe-reasons";
 interface UnsubscribeFormProps {
   token: string;
   email: string;
+  /** Topics from Settings. Empty hides the "hear less" choices. */
+  topics?: Array<{ id: string; label: string }>;
+  /** Topics this person has already turned off. */
+  optedOut?: string[];
 }
 
-export function UnsubscribeForm({ token, email }: UnsubscribeFormProps) {
+export function UnsubscribeForm({ token, email, topics = [], optedOut = [] }: UnsubscribeFormProps) {
   const [state, setState] = React.useState<"idle" | "working" | "done" | "error">(
     "idle",
   );
@@ -109,6 +114,9 @@ export function UnsubscribeForm({ token, email }: UnsubscribeFormProps) {
         It takes effect immediately. You do not need an account and nothing else
         is asked of you.
       </p>
+      {topics.length > 0 && (
+        <HearLess token={token} topics={topics} optedOut={optedOut} />
+      )}
       {state === "error" && (
         <p className="mt-3 text-[12px] text-danger">
           Something went wrong on our end. Email{" "}
@@ -184,5 +192,83 @@ function WhyQuestion({ token }: { token: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "Or hear less." The alternative to leaving altogether: untick what
+ * they don't want. Below the unsubscribe button, never in front of it,
+ * so nobody has to get past it to leave.
+ */
+function HearLess({
+  token,
+  topics,
+  optedOut,
+}: {
+  token: string;
+  topics: Array<{ id: string; label: string }>;
+  optedOut: string[];
+}) {
+  const [keep, setKeep] = React.useState<Set<string>>(
+    () => new Set(topics.map((t) => t.id).filter((id) => !optedOut.includes(id))),
+  );
+  const [state, setState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  function toggle(id: string) {
+    setState("idle");
+    setKeep((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setState("saving");
+    const result = await savePreferencesAction(token, [...keep]);
+    setState(result.ok ? "saved" : "error");
+  }
+
+  return (
+    <form onSubmit={save} className="mt-5 border-t border-hairline pt-4 text-left">
+      <h2 className="mb-1 text-[12.5px] font-bold text-ink">Or just hear less</h2>
+      <p className="mb-2.5 text-[11.5px] leading-relaxed text-ink-mute">
+        Untick what you don&apos;t want. Notes from your broker without a topic will
+        still come; to stop everything, use Unsubscribe above.
+      </p>
+      <div className="space-y-1.5">
+        {topics.map((t) => (
+          <label key={t.id} className="flex items-center gap-2 text-[12.5px] text-ink">
+            <input
+              type="checkbox"
+              checked={keep.has(t.id)}
+              onChange={() => toggle(t.id)}
+              className="h-4 w-4"
+            />
+            {t.label}
+          </label>
+        ))}
+      </div>
+      <button
+        type="submit"
+        disabled={state === "saving"}
+        className="mt-3 h-10 w-full rounded-lg border text-[13px] font-semibold text-brand-deep disabled:opacity-60"
+        style={{ borderColor: "var(--color-hairline)" }}
+      >
+        {state === "saving" ? "Saving…" : "Save my choices"}
+      </button>
+      {state === "saved" && (
+        <p className="mt-2 text-[12px]" style={{ color: "var(--color-ok)" }}>
+          Saved. You&apos;ll only get what&apos;s ticked.
+        </p>
+      )}
+      {state === "error" && (
+        <p className="mt-2 text-[12px] text-danger">
+          That didn&apos;t save. Try again, or use Unsubscribe above.
+        </p>
+      )}
+    </form>
   );
 }

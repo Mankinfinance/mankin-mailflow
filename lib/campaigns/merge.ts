@@ -230,7 +230,7 @@ export function unsubscribeFooterHtml(
     `<div style="${FOOTER_STYLE}">`,
     `  You are receiving this because Mankin Finance has arranged or discussed finance for you.`,
     `  <a href="${href}" style="color:#8a90a2;text-decoration:underline;">Unsubscribe</a>`,
-    `  to stop receiving updates like this. Loan-specific correspondence about an application in progress will still reach you.`,
+    `  to stop receiving updates like this, or choose which ones you get on the same page. Loan-specific correspondence about an application in progress will still reach you.`,
     ...(postal ? [`  <br>Mankin Finance Pty Ltd, ${escapeHtml(postal)}`] : []),
     `</div>`,
   ].join("\n");
@@ -244,7 +244,7 @@ export function unsubscribeFooterText(
   return [
     "—",
     "You are receiving this because Mankin Finance has arranged or discussed finance for you.",
-    `To stop receiving updates like this, unsubscribe here: ${unsubscribeUrl}`,
+    `To stop receiving updates like this, or choose which ones you get, go here: ${unsubscribeUrl}`,
     "Loan-specific correspondence about an application in progress will still reach you.",
     ...(postal ? [`Mankin Finance Pty Ltd, ${postal}`] : []),
   ].join("\n");

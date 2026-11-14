@@ -1,6 +1,8 @@
 import { verifyTrackingToken } from "@/lib/campaigns/tracking";
 import { MANKIN_CREDIT_LINE } from "@/lib/email-signature";
 import { UnsubscribeForm } from "@/components/campaigns/UnsubscribeForm";
+import { currentSettings } from "@/lib/mailflow/current-settings";
+import { repos } from "@/lib/db/repos";
 
 /**
  * Unsubscribe landing page. Reached from the footer of every campaign,
@@ -31,6 +33,14 @@ export default async function UnsubscribePage({
 }) {
   const { token } = await params;
   const verified = await verifyTrackingToken(token, "unsubscribe");
+  /* Their topic choices, for "hear less" instead of nothing. Never
+     allowed to break the page: the unsubscribe itself is the part the
+     law requires. */
+  const prefs = verified.ok
+    ? await Promise.all([currentSettings(), repos().campaign.topicOptOuts(verified.claims.em)])
+        .then(([settings, optedOut]) => ({ topics: settings.topics, optedOut }))
+        .catch(() => ({ topics: [], optedOut: [] as string[] }))
+    : { topics: [], optedOut: [] as string[] };
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-paper px-5 py-10">
@@ -54,7 +64,12 @@ export default async function UnsubscribePage({
         </div>
 
         {verified.ok ? (
-          <UnsubscribeForm token={token} email={verified.claims.em} />
+          <UnsubscribeForm
+            token={token}
+            email={verified.claims.em}
+            topics={prefs.topics}
+            optedOut={prefs.optedOut}
+          />
         ) : (
           <>
             <h1

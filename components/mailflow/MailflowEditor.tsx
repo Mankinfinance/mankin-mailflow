@@ -44,7 +44,11 @@ export interface MailflowEditorProps {
     audience: AudienceFilter;
     trackOpens: boolean;
     trackClicks: boolean;
+    /** Topic id from Settings, or "" for none. */
+    topicId: string;
   };
+  /** The topics in Settings, for the "what's it about" choice. */
+  topics: Array<{ id: string; label: string }>;
   brokers: Array<{ id: string; name: string; short: string; initials: string }>;
   lenderCodes: string[];
   stages: Array<{ id: string; label: string }>;
@@ -77,6 +81,7 @@ export function MailflowEditor({
   bestHour,
   signature,
   postalAddress,
+  topics,
 }: MailflowEditorProps) {
   const router = useRouter();
   const [draft, setDraft] = React.useState(campaign);
@@ -89,6 +94,7 @@ export function MailflowEditor({
   const [pending, startTransition] = React.useTransition();
 
   const audience = draft.audience;
+  const topicId = draft.topicId;
 
   function patch(next: Partial<typeof draft>) {
     setDraft((d) => ({ ...d, ...next }));
@@ -108,7 +114,7 @@ export function MailflowEditor({
     let cancelled = false;
     const timer = setTimeout(async () => {
       setRecounting(true);
-      const result = await previewAudienceAction(audience);
+      const result = await previewAudienceAction(audience, topicId);
       if (cancelled) return;
       setRecounting(false);
       if (result.ok) setPreview(result.preview);
@@ -117,7 +123,7 @@ export function MailflowEditor({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [audience]);
+  }, [audience, topicId]);
 
   /* Deliverability check. Warns, never blocks — a false positive that
      stops a legitimate send costs more than a marginal subject line,
@@ -160,6 +166,7 @@ export function MailflowEditor({
       audience: draft.audience,
       trackOpens: draft.trackOpens,
       trackClicks: draft.trackClicks,
+      topicId: draft.topicId,
     });
     if (!result.ok) setStatus({ tone: "error", text: result.error });
     return result.ok;
@@ -222,6 +229,29 @@ export function MailflowEditor({
               });
             }}
           />
+          {topics.length > 0 && (
+            <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t pt-3" style={{ borderColor: "var(--color-hairline-softer)" }}>
+              <label htmlFor="campaign-topic" className="text-[12px] font-semibold text-ink">
+                What it&rsquo;s about
+              </label>
+              <select
+                id="campaign-topic"
+                value={draft.topicId}
+                onChange={(e) => patch({ topicId: e.target.value })}
+                className="h-[30px] rounded-md border border-hairline bg-surface px-2 text-[12px] text-ink"
+              >
+                <option value="">No topic: goes to everyone above</option>
+                {topics.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-ink-mute">
+                People who turned this topic off on their preferences page are left out.
+              </span>
+            </div>
+          )}
         </PanelShell>
 
         <PanelShell

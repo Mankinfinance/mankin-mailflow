@@ -80,7 +80,7 @@ export default async function MarketingCampaignPage({
     ].sort();
     // A real count on first paint, so the rail never opens on a zero that
     // then jumps once the client-side recount lands.
-    const initial = await previewAudienceAction(audience);
+    const initial = await previewAudienceAction(audience, campaign.topicId);
 
     /* The hour to schedule for, from every click the firm has recorded.
        Shown beside the scheduler rather than applied silently: the
@@ -109,7 +109,9 @@ export default async function MarketingCampaignPage({
             audience,
             trackOpens: campaign.trackOpens,
             trackClicks: campaign.trackClicks,
+            topicId: campaign.topicId ?? "",
           }}
+          topics={settings.topics}
           brokers={senders}
           lenderCodes={lenderCodes}
           stages={STAGES.map((s) => ({ id: s.id, label: s.shortLabel }))}
