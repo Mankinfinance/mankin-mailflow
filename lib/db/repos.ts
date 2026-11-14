@@ -3787,6 +3787,7 @@ function mockRepos(): RepoBundle {
           updatedAt: now,
           name: row.name,
           subject: row.subject ?? "",
+          preheader: row.preheader ?? "",
           body: row.body ?? "",
           status: row.status ?? "draft",
           audience: row.audience,

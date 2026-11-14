@@ -296,3 +296,37 @@ describe("client-supplied merge values stay text", () => {
     expect(out.html).toMatch(/href="https:\/\/tidycal\.com\/michael"/);
   });
 });
+
+describe("preview text", () => {
+  const base = {
+    subject: "Hi",
+    body: "Hi {{first_name}},\n\nBody.",
+    links: { unsubscribeUrl: "https://mail.mankinfinance.com/e/u/t" },
+    brokerId: "mm",
+  };
+
+  it("goes first in the email, hidden, with merge fields filled in", async () => {
+    const { renderCampaign } = await import("./merge");
+    const out = renderCampaign({
+      ...base,
+      preheader: "{{first_name}}, rates have moved",
+      fields: { first_name: "Sarah" },
+    } as Parameters<typeof renderCampaign>[0]);
+    expect(out.html.startsWith('<div style="display:none')).toBe(true);
+    expect(out.html).toContain("Sarah, rates have moved");
+    // Not in the plain-text version, which has no hidden text.
+    expect(out.text).not.toContain("rates have moved");
+  });
+
+  it("is left out entirely when empty, and escapes what a client typed", async () => {
+    const { renderCampaign } = await import("./merge");
+    const empty = renderCampaign({ ...base, preheader: "  ", fields: { first_name: "Sarah" } } as Parameters<typeof renderCampaign>[0]);
+    expect(empty.html).not.toContain("display:none");
+    const nasty = renderCampaign({
+      ...base,
+      preheader: "Hi {{first_name}}",
+      fields: { first_name: "<script>x</script>" },
+    } as Parameters<typeof renderCampaign>[0]);
+    expect(nasty.html).not.toContain("<script>");
+  });
+});

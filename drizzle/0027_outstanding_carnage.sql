@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "preheader" text DEFAULT '' NOT NULL;

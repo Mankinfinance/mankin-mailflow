@@ -85,6 +85,7 @@ export interface CampaignDraftInput {
   id: string;
   name: string;
   subject: string;
+  preheader: string;
   subjectB: string;
   abTestPercent: number;
   body: string;
@@ -126,7 +127,12 @@ export async function saveCampaignAction(
   ) {
     return { ok: false, error: "The test share is 0% to 50%." };
   }
-  if (input.name.length > 200 || input.subject.length > 300 || input.subjectB.length > 300) {
+  if (
+    input.name.length > 200 ||
+    input.subject.length > 300 ||
+    input.subjectB.length > 300 ||
+    (input.preheader ?? "").length > 200
+  ) {
     return { ok: false, error: "Keep the name and subject lines shorter." };
   }
   if (input.body.length > 100_000) {
@@ -136,6 +142,7 @@ export async function saveCampaignAction(
   await repos().campaign.update(input.id, {
     name: input.name.trim(),
     subject: input.subject,
+    preheader: (input.preheader ?? "").trim(),
     // Empty string means no test; stored as null so the column reads
     // the same way everywhere that checks it.
     subjectB: input.subjectB.trim() ? input.subjectB : null,
@@ -165,6 +172,46 @@ export async function saveCampaignAction(
 
   revalidatePath(`/marketing/campaigns/${input.id}`);
   return { ok: true };
+}
+
+/**
+ * Copy a campaign into a new draft: the words, the subject lines, the
+ * sender, the audience and the tracking. Not the schedule, the send
+ * record or the results - a copy starts from nothing having happened.
+ * For the monthly rate update and the like, which are last month's
+ * email with this month's numbers.
+ */
+export async function duplicateCampaignAction(
+  id: string,
+): Promise<Result<{ id: string }>> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  const original = await repos().campaign.get(id);
+  if (!original) return { ok: false, error: "That campaign no longer exists." };
+
+  const copy = await repos().campaign.create({
+    name: `${original.name} (copy)`.slice(0, 200),
+    subject: original.subject,
+    preheader: original.preheader ?? "",
+    body: original.body,
+    status: "draft",
+    audience: original.audience,
+    fromBrokerId: original.fromBrokerId,
+    createdBy: auth.brokerId,
+    trackOpens: original.trackOpens,
+    trackClicks: original.trackClicks,
+    subjectB: original.subjectB,
+    abTestPercent: original.abTestPercent,
+  });
+
+  await auditLog({
+    actor: { type: "broker", id: auth.brokerId },
+    action: "campaign.duplicate",
+    meta: { campaignId: copy.id, copiedFrom: original.id },
+  });
+  revalidatePath("/marketing/campaigns");
+  return { ok: true, id: copy.id };
 }
 
 export async function deleteCampaignAction(id: string): Promise<Result> {
@@ -428,6 +475,7 @@ export async function startCampaignAction(
 
   const badFields = [
     ...unknownMergeFields(campaign.subject, MERGE_FIELDS),
+    ...unknownMergeFields(campaign.preheader ?? "", MERGE_FIELDS),
     ...unknownMergeFields(campaign.body, MERGE_FIELDS),
   ];
   if (badFields.length) {

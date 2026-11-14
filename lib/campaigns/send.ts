@@ -74,6 +74,7 @@ export async function sendOneCampaignEmail(args: {
     // Which of the two subjects this recipient was assigned, or the
     // winning one if they were held back for it.
     subject: subjectFor(campaign, recipient.variant),
+    preheader: campaign.preheader,
     body: campaign.body,
     fields: recipient.fields ?? {},
     brokerId: campaign.fromBrokerId,
@@ -334,8 +335,10 @@ export async function decideDueAbTests(
 
     let aSent = 0;
     let aOpened = 0;
+    let aClicked = 0;
     let bSent = 0;
     let bOpened = 0;
+    let bClicked = 0;
     let pendingInTest = 0;
 
     for (const r of recipients) {
@@ -348,9 +351,11 @@ export async function decideDueAbTests(
       if (r.variant === "a") {
         aSent += 1;
         if (r.openedAt) aOpened += 1;
+        if (r.clickedAt) aClicked += 1;
       } else {
         bSent += 1;
         if (r.openedAt) bOpened += 1;
+        if (r.clickedAt) bClicked += 1;
       }
     }
 
@@ -359,6 +364,8 @@ export async function decideDueAbTests(
       aOpened,
       bSent,
       bOpened,
+      aClicked,
+      bClicked,
       pendingInTest,
       startedAt: campaign.startedAt,
       decideAfterHours: campaign.abDecideAfterHours,

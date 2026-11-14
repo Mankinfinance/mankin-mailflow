@@ -61,3 +61,13 @@ describe("the two settings saves", () => {
     expect(result).toEqual({ ok: false, error: expect.stringContaining("Award 1 image") });
   });
 });
+
+describe("the unsubscribe mailbox", () => {
+  const base = { postalAddress: "Suite 208, Oran Park", trackOpensByDefault: true, trackClicksByDefault: true, batchSize: 60 };
+  it("must be one of the firm's own addresses, and not one people write to", async () => {
+    expect((await saveSettingsAction({ ...base, unsubscribeMailto: "unsub@gmail.com" })).ok).toBe(false);
+    expect((await saveSettingsAction({ ...base, unsubscribeMailto: "support@mankinfinance.com" })).ok).toBe(false);
+    expect((await saveSettingsAction({ ...base, unsubscribeMailto: "unsubscribe@mankinfinance.com" })).ok).toBe(true);
+    expect((await currentSettings()).unsubscribeMailto).toBe("unsubscribe@mankinfinance.com");
+  });
+});

@@ -6,8 +6,10 @@
  * are testable without sending anything.
  *
  * The shape of the test: a slice of the audience is split evenly between
- * two subject lines, opens are given a few hours to accumulate, and the
- * winner goes to everyone held back. That is the only test worth running
+ * two subject lines, results are given a few hours to accumulate, and the
+ * winner goes to everyone held back. The winner is the one more people
+ * clicked, once there are enough clicks to read; otherwise the one more
+ * people opened (see MIN_CLICKS_TO_DECIDE). That is the only test worth running
  * at a few hundred recipients. Testing the body as well, or optimising
  * send time per contact, needs volume this firm will not have for a long
  * time, and a result read off too little data is worse than no test —
@@ -66,6 +68,9 @@ export interface VariantResult {
   variant: Variant;
   sent: number;
   opened: number;
+  clicked: number;
+  /** Null when nothing was sent. */
+  clickRate: number | null;
   /** Null when nothing was sent — not zero: an unsent arm has not failed
    *  to be opened. */
   openRate: number | null;
@@ -80,14 +85,28 @@ export interface AbDecision {
   b: VariantResult;
 }
 
-function result(variant: Variant, sent: number, opened: number): VariantResult {
+function result(variant: Variant, sent: number, opened: number, clicked: number): VariantResult {
   return {
     variant,
     sent,
     opened,
+    clicked,
     openRate: sent === 0 ? null : (opened / sent) * 100,
+    clickRate: sent === 0 ? null : (clicked / sent) * 100,
   };
 }
+
+/**
+ * Clicks needed across both arms before they decide the test.
+ *
+ * Opens are no longer a clean signal: Apple Mail Privacy Protection
+ * fetches every image on delivery, so a large share of "opens" are a
+ * proxy, not a person, and they land on both subjects alike. A click is
+ * a person. But clicks are rare - a few per hundred - and two or three
+ * of them are noise. So clicks decide once there are enough to mean
+ * something, and opens decide below that, with the reason saying which.
+ */
+export const MIN_CLICKS_TO_DECIDE = 10;
 
 /**
  * Call the test, or say why it is not callable yet.
@@ -106,14 +125,16 @@ export function decideWinner(input: {
   aOpened: number;
   bSent: number;
   bOpened: number;
+  aClicked?: number;
+  bClicked?: number;
   /** Test recipients still waiting to go out. */
   pendingInTest: number;
   startedAt: Date | null;
   decideAfterHours: number;
   now: Date;
 }): AbDecision {
-  const a = result("a", input.aSent, input.aOpened);
-  const b = result("b", input.bSent, input.bOpened);
+  const a = result("a", input.aSent, input.aOpened, input.aClicked ?? 0);
+  const b = result("b", input.bSent, input.bOpened, input.bClicked ?? 0);
   const hold = (reason: string): AbDecision => ({ winner: null, reason, a, b });
 
   if (input.startedAt === null) return hold("The test has not started.");
@@ -136,6 +157,23 @@ export function decideWinner(input: {
     return {
       winner: "a",
       reason: "One subject never sent, so there was nothing to compare.",
+      a,
+      b,
+    };
+  }
+
+  /* Clicks first, when there are enough of them to read. */
+  if (
+    a.clicked + b.clicked >= MIN_CLICKS_TO_DECIDE &&
+    a.clickRate !== null &&
+    b.clickRate !== null &&
+    a.clickRate !== b.clickRate
+  ) {
+    const winner = a.clickRate > b.clickRate ? a : b;
+    const loser = a.clickRate > b.clickRate ? b : a;
+    return {
+      winner: winner.variant,
+      reason: `Subject ${winner.variant.toUpperCase()} was clicked by ${winner.clickRate!.toFixed(1)}% against ${loser.clickRate!.toFixed(1)}%.`,
       a,
       b,
     };

@@ -799,6 +799,9 @@ export const campaigns = pgTable(
     name: text("name").notNull(),
     /** Subject line, merge fields allowed. */
     subject: text("subject").notNull().default(""),
+    /** Preview text shown after the subject in the inbox. Merge fields
+     *  allowed. Empty means the client shows the body's first words. */
+    preheader: text("preheader").notNull().default(""),
     /** Body in the app's light markup (see lib/campaigns/merge.ts). */
     body: text("body").notNull().default(""),
 

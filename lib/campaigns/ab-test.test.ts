@@ -165,3 +165,29 @@ describe("subjectFor", () => {
     expect(subjectFor(cleared, null)).toBe("Your rate review");
   });
 });
+
+describe("deciding on clicks", () => {
+  const base = {
+    aSent: 100,
+    bSent: 100,
+    pendingInTest: 0,
+    startedAt: new Date("2026-11-01T00:00:00Z"),
+    decideAfterHours: 4,
+    now: new Date("2026-11-01T06:00:00Z"),
+  };
+
+  it("lets clicks decide once there are enough, even against opens", async () => {
+    const { decideWinner } = await import("./ab-test");
+    // B opened more (Apple's automatic opens), but A was clicked more.
+    const d = decideWinner({ ...base, aOpened: 40, bOpened: 55, aClicked: 9, bClicked: 3 });
+    expect(d.winner).toBe("a");
+    expect(d.reason).toContain("clicked");
+  });
+
+  it("falls back to opens when there are too few clicks to read", async () => {
+    const { decideWinner } = await import("./ab-test");
+    const d = decideWinner({ ...base, aOpened: 40, bOpened: 55, aClicked: 2, bClicked: 1 });
+    expect(d.winner).toBe("b");
+    expect(d.reason).toContain("opened");
+  });
+});

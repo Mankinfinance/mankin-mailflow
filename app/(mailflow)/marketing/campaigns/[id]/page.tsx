@@ -100,6 +100,7 @@ export default async function MarketingCampaignPage({
             id: campaign.id,
             name: campaign.name,
             subject: campaign.subject,
+            preheader: campaign.preheader ?? "",
             subjectB: campaign.subjectB ?? "",
             abTestPercent: campaign.abTestPercent,
             body: campaign.body,

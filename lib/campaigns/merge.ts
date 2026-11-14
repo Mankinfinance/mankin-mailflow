@@ -262,6 +262,8 @@ export interface CampaignLinks {
 
 export interface RenderCampaignInput {
   subject: string;
+  /** The grey line after the subject in the inbox list. Merge fields allowed. */
+  preheader?: string;
   body: string;
   fields: Record<string, string>;
   /** Whose signature goes at the bottom. */
@@ -322,6 +324,20 @@ function safeFields(fields: Record<string, string>): Record<string, string> {
   return out;
 }
 
+/**
+ * Preview text: what Gmail, Outlook and Apple Mail show after the
+ * subject in the inbox list. Without it they show the first words of
+ * the body ("Hi Sarah,"), which says nothing. It is the first thing in
+ * the HTML, hidden in every client, and followed by invisible padding
+ * so the body's opening words don't run on after it in the preview.
+ */
+export function preheaderHtml(text: string): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  const padding = "&#847;&zwnj;&nbsp;".repeat(60);
+  return `<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;color:transparent;">${escapeHtml(clean)}${padding}</div>`;
+}
+
 export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
   const fields = safeFields(input.fields);
   const subject = applyMergeFields(input.subject, fields).trim();
@@ -346,9 +362,10 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
      does not print it a second time. It is only passed to the footer
      when there is no address at all, which prints nothing either way. */
   const parts = [
+    preheaderHtml(applyMergeFields(input.preheader ?? "", fields)),
     restoreImagesHtml(restoreLinksHtml(bodyHtml, links, wrapUrl), images),
     unsubscribeFooterHtml(input.links.unsubscribeUrl),
-  ];
+  ].filter(Boolean);
   if (input.links.openPixelUrl) {
     parts.push(
       `<img src="${escapeHtml(input.links.openPixelUrl)}" width="1" height="1" alt="" style="display:block;border:0;">`,

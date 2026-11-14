@@ -20,6 +20,8 @@ import { MERGE_FIELDS } from "@/lib/campaigns/audience";
 export interface MessagePanelProps {
   name: string;
   subject: string;
+  /** Preview text: the grey line after the subject in the inbox. */
+  preheader: string;
   /** Rival subject line. Empty means no A/B test. */
   subjectB: string;
   /** Share of the audience used to decide the test. */
@@ -37,6 +39,7 @@ export interface MessagePanelProps {
   onChange: (patch: {
     name?: string;
     subject?: string;
+    preheader?: string;
     subjectB?: string;
     abTestPercent?: number;
     body?: string;
@@ -74,6 +77,7 @@ function editDistance(a: string, b: string): number {
 export function MessagePanel({
   name,
   subject,
+  preheader,
   subjectB,
   abTestPercent,
   audienceSize,
@@ -171,6 +175,27 @@ export function MessagePanel({
         />
       </label>
 
+      <label className="mb-3 block">
+        <span className="mb-1 flex items-baseline justify-between">
+          <FieldLabel inline>Preview text</FieldLabel>
+          <span className="text-[10.5px] text-ink-faint">
+            {preheader.length === 0
+              ? "optional, shown after the subject in the inbox"
+              : `${preheader.length} characters${preheader.length > 100 ? ", the inbox will cut it short" : ""}`}
+          </span>
+        </span>
+        <input
+          value={preheader}
+          maxLength={200}
+          onChange={(e) => onChange({ preheader: e.target.value })}
+          placeholder="Rates have moved since you settled. Here's what it means for you."
+          className="mono h-[34px] w-full rounded-md border border-hairline bg-surface px-2.5 text-[12px] text-ink placeholder:text-ink-faint"
+        />
+        <span className="mt-1 block text-[11px] text-ink-mute">
+          Left empty, Gmail and Outlook show the email&apos;s first words instead (&ldquo;Hi Sarah,&rdquo;).
+        </span>
+      </label>
+
       <AbTestField
         subjectB={subjectB}
         abTestPercent={abTestPercent}
@@ -186,6 +211,7 @@ export function MessagePanel({
         {mode === "preview" && (
           <EmailPreview
             subject={subject}
+            preheader={preheader}
             body={body}
             brokerId={fromBrokerId}
             fromName={brokers.find((b) => b.id === fromBrokerId)?.name ?? ""}
@@ -443,8 +469,8 @@ function AbTestField({
         {inTest > 0 ? (
           <>
             {inTest} people see the two subjects, {inTest / 2} each. Four hours
-            later the one with more opens goes to the remaining{" "}
-            {audienceSize - inTest}.
+            later the one more people clicked (or opened, if too few clicked to
+            tell) goes to the remaining {audienceSize - inTest}.
           </>
         ) : (
           <>
@@ -494,8 +520,16 @@ function ModeSwitch({
  * sending broker. Drawn in a sandboxed frame so the email's own inline
  * styles apply and none of the app's do; links inside are inert.
  */
+/** The preview text as the inbox would show it: merged for the example
+ *  client, read back out of the rendered email's hidden preheader. */
+function previewFieldsText(raw: string, rendered: { html: string }): string {
+  const m = /<div style="display:none[^"]*">([^<&]*)/.exec(rendered.html);
+  return (m?.[1] ?? raw).trim();
+}
+
 function EmailPreview({
   subject,
+  preheader,
   body,
   brokerId,
   fromName,
@@ -503,6 +537,7 @@ function EmailPreview({
   postalAddress,
 }: {
   subject: string;
+  preheader: string;
   body: string;
   brokerId: string;
   fromName: string;
@@ -510,8 +545,8 @@ function EmailPreview({
   postalAddress?: string;
 }) {
   const rendered = React.useMemo(
-    () => previewEmail({ subject, body, brokerId, signature, postalAddress }),
-    [subject, body, brokerId, signature, postalAddress],
+    () => previewEmail({ subject, preheader, body, brokerId, signature, postalAddress }),
+    [subject, preheader, body, brokerId, signature, postalAddress],
   );
   const frameRef = React.useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = React.useState(480);
@@ -531,6 +566,9 @@ function EmailPreview({
         <div className="truncate">
           <span className="text-ink-faint">Subject </span>
           <span className="font-semibold text-ink">{rendered.subject || "(no subject)"}</span>
+          {preheader.trim() && (
+            <span className="text-ink-mute"> &ndash; {previewFieldsText(preheader, rendered)}</span>
+          )}
         </div>
       </div>
       <iframe

@@ -42,6 +42,7 @@ export function previewFields(brokerId: string): Record<string, string> {
 
 export function previewEmail(input: {
   subject: string;
+  preheader?: string;
   body: string;
   brokerId: string;
   signature?: SignatureSettings;
@@ -49,6 +50,7 @@ export function previewEmail(input: {
 }): RenderedCampaign {
   return renderCampaign({
     subject: input.subject,
+    preheader: input.preheader,
     body: input.body,
     fields: previewFields(input.brokerId),
     brokerId: input.brokerId,

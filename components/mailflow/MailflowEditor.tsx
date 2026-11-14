@@ -35,6 +35,7 @@ export interface MailflowEditorProps {
     id: string;
     name: string;
     subject: string;
+    preheader: string;
     subjectB: string;
     abTestPercent: number;
     body: string;
@@ -130,20 +131,21 @@ export function MailflowEditor({
     const found = new Set<string>();
     /* Subject B is checked too — a typo'd merge field there would
        reach half the test group and nobody would see it first. */
-    for (const text of [draft.subject, draft.subjectB, draft.body]) {
+    for (const text of [draft.subject, draft.subjectB, draft.preheader, draft.body]) {
       for (const m of text.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi)) {
         const name = m[1].toLowerCase();
         if (!known.has(name)) found.add(name);
       }
     }
     return [...found];
-  }, [draft.subject, draft.subjectB, draft.body]);
+  }, [draft.subject, draft.subjectB, draft.preheader, draft.body]);
 
   async function save(): Promise<boolean> {
     const result = await saveCampaignAction({
       id: draft.id,
       name: draft.name,
       subject: draft.subject,
+      preheader: draft.preheader,
       subjectB: draft.subjectB,
       abTestPercent: draft.abTestPercent,
       body: draft.body,
@@ -162,6 +164,7 @@ export function MailflowEditor({
         <MessagePanel
           name={draft.name}
           subject={draft.subject}
+          preheader={draft.preheader}
           body={draft.body}
           fromBrokerId={draft.fromBrokerId}
           subjectB={draft.subjectB}

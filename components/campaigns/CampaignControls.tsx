@@ -4,12 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   deleteCampaignAction,
+  duplicateCampaignAction,
   pauseCampaignAction,
   resumeCampaignAction,
 } from "@/app/(mailflow)/marketing/campaigns/actions";
 
 /**
- * Pause / resume / delete for a campaign that is past the draft stage.
+ * Pause / resume / duplicate / delete for a campaign that is past the draft stage.
  * Pause leaves the queue intact — it stops the cron picking the campaign
  * up, so a send that is going wrong can be halted mid-flight and picked
  * back up once it's been sorted out.
@@ -56,6 +57,22 @@ export function CampaignControls({
           Resume
         </button>
       )}
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          setError(null);
+          startTransition(async () => {
+            const result = await duplicateCampaignAction(id);
+            if (result.ok) router.push(`/marketing/campaigns/${result.id}`);
+            else setError(result.error);
+          });
+        }}
+        title="Copy the email, subject, sender and audience into a new draft"
+        className="rounded-md border border-hairline px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-paper-warm disabled:opacity-50"
+      >
+        Duplicate
+      </button>
       {status !== "sending" && (
         <button
           type="button"
