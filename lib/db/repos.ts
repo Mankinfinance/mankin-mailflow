@@ -443,6 +443,9 @@ export interface CampaignRepo {
   suppress(row: NewEmailSuppression): Promise<void>;
   unsuppress(email: string): Promise<void>;
   listSuppressions(limit?: number): Promise<EmailSuppressionRow[]>;
+  /** Record why someone unsubscribed, when they chose to say. Only on
+   *  an existing register entry; returns false when there is none. */
+  setSuppressionFeedback(email: string, feedback: string, note: string | null): Promise<boolean>;
   /** Which of these addresses are suppressed. Batched so the sender can
    *  check a whole campaign in one query. */
   suppressedAmong(emails: string[]): Promise<Set<string>>;
@@ -2195,6 +2198,15 @@ function realRepos(): RepoBundle {
           if (!isMissingRelation(err)) throw err;
           return [];
         }
+      },
+      async setSuppressionFeedback(email, feedback, note) {
+        const db = getDb();
+        const rows = await db
+          .update(emailSuppressions)
+          .set({ feedback, feedbackNote: note })
+          .where(eq(emailSuppressions.email, email.toLowerCase()))
+          .returning({ email: emailSuppressions.email });
+        return rows.length > 0;
       },
       async suppressedAmong(emails) {
         if (emails.length === 0) return new Set<string>();
@@ -4001,7 +4013,15 @@ function mockRepos(): RepoBundle {
           reason: row.reason ?? "unsubscribe",
           campaignId: row.campaignId ?? null,
           addedBy: row.addedBy ?? "customer",
+          feedback: null,
+          feedbackNote: null,
         });
+      },
+      async setSuppressionFeedback(email, feedback, note) {
+        const row = mockSuppressionStore.get(email.toLowerCase());
+        if (!row) return false;
+        mockSuppressionStore.set(row.email, { ...row, feedback, feedbackNote: note });
+        return true;
       },
       async unsuppress(email) {
         mockSuppressionStore.delete(email.toLowerCase());

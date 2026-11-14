@@ -29,7 +29,7 @@ const AUDIENCE = "campaign";
  */
 const TOKEN_TTL_DAYS = 730;
 
-export type TrackingPurpose = "unsubscribe" | "open" | "click";
+export type TrackingPurpose = "unsubscribe" | "open" | "click" | "view";
 
 export interface TrackingClaims {
   /** Campaign the email belongs to. */
@@ -112,6 +112,8 @@ export interface RecipientLinks {
   oneClickUrl: string;
   openPixelUrl?: string;
   wrapUrl?: (url: string) => string;
+  /** "View this email in your browser": this person's own copy. */
+  webVersionUrl?: string;
 }
 
 export async function buildRecipientLinks(args: {
@@ -119,6 +121,9 @@ export async function buildRecipientLinks(args: {
   email: string;
   trackOpens: boolean;
   trackClicks: boolean;
+  /** Add a "view in your browser" link. Campaigns only: the web page
+   *  re-renders the campaign for this recipient. */
+  webVersion?: boolean;
 }): Promise<RecipientLinks> {
   const base = portalBaseUrl();
   const email = args.email.toLowerCase();
@@ -151,6 +156,15 @@ export async function buildRecipientLinks(args: {
     });
     links.wrapUrl = (url: string) =>
       `${base}/e/c/${clickToken}?u=${encodeURIComponent(url)}&h=${signClickTarget(clickToken, url)}`;
+  }
+
+  if (args.webVersion) {
+    const viewToken = await issueTrackingToken({
+      cid: args.campaignId,
+      em: email,
+      p: "view",
+    });
+    links.webVersionUrl = `${base}/e/v/${viewToken}`;
   }
 
   return links;

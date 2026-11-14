@@ -6,6 +6,7 @@ import { MailflowEditor } from "@/components/mailflow/MailflowEditor";
 import { currentSettings } from "@/lib/mailflow/current-settings";
 import { CampaignReport } from "@/components/mailflow/CampaignReport";
 import { FollowUpButton } from "@/components/mailflow/FollowUpButton";
+import { ExportCsvLink } from "@/components/mailflow/ExportCsvLink";
 import { ClickMap } from "@/components/mailflow/ClickMap";
 import { DomainBreakdown } from "@/components/mailflow/DomainBreakdown";
 import { buildClickMap } from "@/lib/campaigns/click-map";
@@ -180,6 +181,12 @@ export default async function MarketingCampaignPage({
           </>
         }
       />
+      <div className="mt-3.5 flex flex-wrap items-start justify-between gap-3">
+        <ExportCsvLink
+          href={`/api/export/campaign?id=${campaign.id}`}
+          label="Export results (CSV)"
+        />
+      </div>
       <div className="mt-3.5">
         <FollowUpButton
           campaignId={campaign.id}

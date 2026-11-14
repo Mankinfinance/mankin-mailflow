@@ -1,4 +1,5 @@
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
+import { ExportCsvLink } from "@/components/mailflow/ExportCsvLink";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import { MailflowContent, PageTitle, Eyebrow } from "@/components/mailflow/MailflowPage";
 import { SubscriberTable } from "@/components/mailflow/SubscriberTable";
@@ -124,6 +125,7 @@ export default async function SubscribersPage() {
           <PageTitle
             title="Subscribers"
             context={`${counts.active} active · ${counts.unsubscribed} unsubscribed · ${counts.bounced} bounced`}
+            actions={<ExportCsvLink href="/api/export/subscribers" />}
           />
           <SubscriberTable
             subscribers={subscribers}

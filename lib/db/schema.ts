@@ -980,6 +980,12 @@ export const emailSuppressions = pgTable(
     campaignId: uuid("campaign_id"),
     /** Team member id for a manual add; "customer" for a self-unsubscribe. */
     addedBy: text("added_by").notNull().default("customer"),
+    /** Why, when the person chose to say after unsubscribing:
+     *  too-many | not-relevant | done-with-loan | never-signed-up | other.
+     *  Never asked before the opt-out, and never required. */
+    feedback: text("feedback"),
+    /** Their own words, for "other". Capped at 300 characters. */
+    feedbackNote: text("feedback_note"),
   },
   (t) => [index("email_suppressions_created_at_idx").on(t.createdAt)],
 );

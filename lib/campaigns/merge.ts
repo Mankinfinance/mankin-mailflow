@@ -258,6 +258,8 @@ export interface CampaignLinks {
   /** Rewrites a body link for click tracking. Defaults to identity when
    *  the campaign has click tracking off. */
   wrapUrl?: (url: string) => string;
+  /** "View this email in your browser". Omitted on the web page itself. */
+  webVersionUrl?: string;
 }
 
 export interface RenderCampaignInput {
@@ -363,6 +365,11 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
      when there is no address at all, which prints nothing either way. */
   const parts = [
     preheaderHtml(applyMergeFields(input.preheader ?? "", fields)),
+    /* Small and grey, top right: for anyone whose mail client mangles
+       the email or blocks its images. */
+    input.links.webVersionUrl
+      ? `<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.4;color:#8a8d96;text-align:right;max-width:640px;"><a href="${escapeHtml(input.links.webVersionUrl)}" style="color:#8a8d96;text-decoration:underline;">View this email in your browser</a></p>`
+      : "",
     restoreImagesHtml(restoreLinksHtml(bodyHtml, links, wrapUrl), images),
     unsubscribeFooterHtml(input.links.unsubscribeUrl),
   ].filter(Boolean);
@@ -383,6 +390,9 @@ export function renderCampaign(input: RenderCampaignInput): RenderedCampaign {
     subject,
     html: parts.join("\n"),
     text: [
+      ...(input.links.webVersionUrl
+        ? [`View this email in your browser: ${input.links.webVersionUrl}`, ""]
+        : []),
       restoreImagesText(restoreLinksText(bodyText, links), images),
       "",
       unsubscribeFooterText(input.links.unsubscribeUrl),

@@ -68,6 +68,7 @@ export async function sendOneCampaignEmail(args: {
     email: recipient.email,
     trackOpens: campaign.trackOpens,
     trackClicks: campaign.trackClicks,
+    webVersion: true,
   });
 
   const rendered = renderCampaign({

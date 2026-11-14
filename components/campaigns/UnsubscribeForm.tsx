@@ -2,15 +2,20 @@
 
 import * as React from "react";
 import { Check } from "lucide-react";
-import { confirmUnsubscribeAction } from "@/app/e/u/[token]/actions";
+import {
+  confirmUnsubscribeAction,
+  saveUnsubscribeFeedbackAction,
+} from "@/app/e/u/[token]/actions";
+import { UNSUBSCRIBE_REASONS } from "@/lib/campaigns/unsubscribe-reasons";
 
 /**
  * The customer's unsubscribe card — the only screen in the product a
  * customer ever sees.
  *
  * Deliberately not gold: gold marks our marketing actions, and this is
- * theirs. One navy button, no survey, no "are you sure", no attempt to
- * talk anyone out of it.
+ * theirs. One navy button, no "are you sure", no attempt to talk anyone
+ * out of it. The one question - why - comes only after they are already
+ * unsubscribed, is optional, and changes nothing about the opt-out.
  *
  * The done state carries the one thing worth explaining — that loan
  * correspondence continues — because a customer mid-application who
@@ -63,6 +68,8 @@ export function UnsubscribeForm({ token, email }: UnsubscribeFormProps) {
           settlement and anything else your loan requires. That correspondence
           is part of the service, not marketing.
         </p>
+        <div className="my-4 h-px w-full bg-hairline" />
+        <WhyQuestion token={token} />
       </>
     );
   }
@@ -112,5 +119,70 @@ export function UnsubscribeForm({ token, email }: UnsubscribeFormProps) {
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * "Mind telling us why?" Optional, after the fact, one tap. Nothing
+ * here can undo or delay the unsubscribe above it.
+ */
+function WhyQuestion({ token }: { token: string }) {
+  const [state, setState] = React.useState<"ask" | "other" | "sending" | "thanks">("ask");
+  const [note, setNote] = React.useState("");
+
+  async function send(reason: string, text?: string) {
+    setState("sending");
+    await saveUnsubscribeFeedbackAction(token, reason, text);
+    // Thanked either way: a failure here costs us an answer, not them anything.
+    setState("thanks");
+  }
+
+  if (state === "thanks") {
+    return <p className="text-[12.5px] text-ink-mute">Thank you, that helps.</p>;
+  }
+
+  return (
+    <div className="text-left">
+      <h2 className="mb-2 text-[12.5px] font-bold text-ink">
+        Mind telling us why? <span className="font-normal text-ink-faint">(optional)</span>
+      </h2>
+      {state === "other" ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send("other", note);
+          }}
+        >
+          <textarea
+            value={note}
+            maxLength={300}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-hairline bg-surface px-2.5 py-2 text-[12.5px] text-ink"
+            aria-label="Your reason"
+          />
+          <button
+            type="submit"
+            className="mt-2 rounded-md border border-hairline px-3 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-paper-warm"
+          >
+            Send
+          </button>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {UNSUBSCRIBE_REASONS.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              disabled={state === "sending"}
+              onClick={() => (r.id === "other" ? setState("other") : void send(r.id))}
+              className="rounded-full border border-hairline px-3 py-1.5 text-[12px] text-ink-soft hover:bg-paper-warm disabled:opacity-50"
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

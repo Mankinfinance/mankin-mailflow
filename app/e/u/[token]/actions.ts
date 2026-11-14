@@ -2,6 +2,8 @@
 
 import { verifyTrackingToken } from "@/lib/campaigns/tracking";
 import { recordUnsubscribe } from "@/lib/campaigns/unsubscribe";
+import { repos } from "@/lib/db/repos";
+import { UNSUBSCRIBE_REASONS } from "@/lib/campaigns/unsubscribe-reasons";
 
 /**
  * Honour an unsubscribe. Called from the confirm button on the landing
@@ -28,6 +30,35 @@ export async function confirmUnsubscribeAction(
     return { ok: true, email: em };
   } catch (err) {
     console.error("[campaign unsubscribe] failed", err);
+    return { ok: false };
+  }
+}
+
+
+/**
+ * Why they left, if they chose to say. Asked only after the unsubscribe
+ * has already happened, and never required: the opt-out does not wait
+ * on it and does not depend on it. Recorded against their register
+ * entry, so "I never asked for these" can be looked into.
+ */
+export async function saveUnsubscribeFeedbackAction(
+  token: string,
+  feedback: string,
+  note?: string,
+): Promise<{ ok: boolean }> {
+  const verified = await verifyTrackingToken(token, "unsubscribe");
+  if (!verified.ok) return { ok: false };
+  if (!UNSUBSCRIBE_REASONS.some((r) => r.id === feedback)) return { ok: false };
+  const text = (note ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || null;
+  try {
+    const saved = await repos().campaign.setSuppressionFeedback(
+      verified.claims.em,
+      feedback,
+      feedback === "other" ? text : null,
+    );
+    return { ok: saved };
+  } catch (err) {
+    console.error("[unsubscribe feedback] failed", err);
     return { ok: false };
   }
 }

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { flushPendingSave } from "@/lib/mailflow/pending-save";
 import {
   deleteCampaignAction,
   duplicateCampaignAction,
@@ -63,12 +64,17 @@ export function CampaignControls({
         onClick={() => {
           setError(null);
           startTransition(async () => {
+            // Save the editor first, so the copy has what's on screen.
+            if (!(await flushPendingSave())) {
+              setError("Save the campaign first: there's a problem with it above.");
+              return;
+            }
             const result = await duplicateCampaignAction(id);
             if (result.ok) router.push(`/marketing/campaigns/${result.id}`);
             else setError(result.error);
           });
         }}
-        title="Copy the email, subject, sender and audience into a new draft"
+        title="Saves this campaign, then copies the email, subjects, sender and audience into a new draft"
         className="rounded-md border border-hairline px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-paper-warm disabled:opacity-50"
       >
         Duplicate

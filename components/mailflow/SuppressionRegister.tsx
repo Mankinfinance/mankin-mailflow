@@ -31,6 +31,8 @@ export interface RegisterRow {
   createdAt: string;
   /** Where the opt-out came from, in a phrase. */
   provenance: string;
+  /** Why, when they chose to say after unsubscribing. */
+  why?: string;
 }
 
 const HOW_TONE: Record<string, { bg: string; ink: string; line: string }> = {
@@ -234,6 +236,9 @@ export function SuppressionRegister({
                             ? "Bounce"
                             : "Unsubscribe"}
                       </span>
+                      {r.why && (
+                        <span className="mt-1 block text-[11px] text-ink-mute">{r.why}</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-3.5 py-2.5 text-right text-[12px] tabular-nums text-ink-mute">
                       {new Date(r.createdAt).toLocaleDateString("en-AU", {

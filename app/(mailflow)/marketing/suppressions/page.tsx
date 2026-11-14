@@ -1,4 +1,6 @@
 import { MailflowNav } from "@/components/mailflow/MailflowNav";
+import { unsubscribeReasonLabel } from "@/lib/campaigns/unsubscribe-reasons";
+import { ExportCsvLink } from "@/components/mailflow/ExportCsvLink";
 import { MailflowTopBar } from "@/components/mailflow/MailflowTopBar";
 import { MailflowContent, PageTitle } from "@/components/mailflow/MailflowPage";
 import {
@@ -33,6 +35,9 @@ export default async function SuppressionsPage() {
     addedBy: teamMember(s.addedBy).short,
     createdAt: s.createdAt.toISOString(),
     provenance: provenanceOf(s.reason, s.campaignId, campaignNames, s.addedBy),
+    why: s.feedback
+      ? `Why: ${unsubscribeReasonLabel(s.feedback)}${s.feedbackNote ? ` - "${s.feedbackNote}"` : ""}`
+      : undefined,
   }));
 
   return (
@@ -54,6 +59,7 @@ export default async function SuppressionsPage() {
           <PageTitle
             title="Do-not-market register"
             context={`${rows.length} address${rows.length === 1 ? "" : "es"} · excluded from every send automatically`}
+            actions={<ExportCsvLink href="/api/export/suppressions" />}
           />
           <div className="max-w-[860px]">
             <SuppressionRegister

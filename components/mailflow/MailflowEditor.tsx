@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { registerPendingSave } from "@/lib/mailflow/pending-save";
 import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
 import {
@@ -140,6 +141,12 @@ export function MailflowEditor({
     return [...found];
   }, [draft.subject, draft.subjectB, draft.preheader, draft.body]);
 
+  /* Duplicate (in the page header) saves this first, so the copy has
+     what's on screen. The ref keeps the latest save without
+     re-registering on every keystroke. */
+  const saveRef = React.useRef<() => Promise<boolean>>(async () => true);
+  React.useEffect(() => registerPendingSave(() => saveRef.current()), []);
+
   async function save(): Promise<boolean> {
     const result = await saveCampaignAction({
       id: draft.id,
@@ -157,6 +164,11 @@ export function MailflowEditor({
     if (!result.ok) setStatus({ tone: "error", text: result.error });
     return result.ok;
   }
+
+  // After each render, so the registered save always sees the latest draft.
+  React.useEffect(() => {
+    saveRef.current = save;
+  });
 
   return (
     <div className="flex flex-col gap-5 lg:flex-row">
