@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "automation_sends_email_idx" ON "automation_sends" USING btree ("email");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "form_submissions_email_idx" ON "form_submissions" USING btree ("email");

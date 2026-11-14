@@ -178,7 +178,7 @@ export function filterSubscribers(
 /* -------------------------------------------------------------------------- */
 
 export interface ActivityEvent {
-  kind: "sent" | "opened" | "clicked" | "unsubscribed" | "added";
+  kind: "sent" | "opened" | "clicked" | "unsubscribed" | "added" | "enquiry" | "survey";
   /** Campaign name, or the provenance line for the "added" event. */
   label: string;
   detail: string;
@@ -249,5 +249,53 @@ export function buildActivity(
     }
   }
 
+  return events.sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+/**
+ * The rest of a contact's history: sequence emails, form enquiries and
+ * survey answers. Loaded for one contact when their panel opens, rather
+ * than for the whole list, and merged with the campaign events above.
+ */
+export function buildHistoryEvents(input: {
+  sends: Array<{
+    automationId: string;
+    sentAt: Date | null;
+    openedAt: Date | null;
+    clickedAt: Date | null;
+    unsubscribedAt: Date | null;
+  }>;
+  automationNames: Map<string, string>;
+  submissions: Array<{ formId: string; submittedAt: Date; dealId: string | null }>;
+  formNames: Map<string, string>;
+  responses: Array<{ surveyId: string; submittedAt: Date; answers: unknown }>;
+  surveyNames: Map<string, string>;
+}): ActivityEvent[] {
+  const events: ActivityEvent[] = [];
+  for (const s of input.sends) {
+    const label = `Sequence: ${input.automationNames.get(s.automationId) ?? "a sequence"}`;
+    if (s.sentAt) events.push({ kind: "sent", label, detail: "Sequence email delivered", at: s.sentAt });
+    if (s.openedAt) events.push({ kind: "opened", label, detail: "Opened", at: s.openedAt });
+    if (s.clickedAt) events.push({ kind: "clicked", label, detail: "Clicked a link", at: s.clickedAt });
+    if (s.unsubscribedAt) events.push({ kind: "unsubscribed", label, detail: "Unsubscribed", at: s.unsubscribedAt });
+  }
+  for (const f of input.submissions) {
+    events.push({
+      kind: "enquiry",
+      label: `Form: ${input.formNames.get(f.formId) ?? "an enquiry form"}`,
+      detail: f.dealId ? "Sent an enquiry, now a deal in the pipeline" : "Sent an enquiry",
+      at: f.submittedAt,
+    });
+  }
+  for (const r of input.responses) {
+    const answers = (r.answers && typeof r.answers === "object" ? r.answers : {}) as Record<string, unknown>;
+    const score = Object.values(answers).find((v) => typeof v === "number" && v >= 0 && v <= 10);
+    events.push({
+      kind: "survey",
+      label: `Survey: ${input.surveyNames.get(r.surveyId) ?? "a survey"}`,
+      detail: typeof score === "number" ? `Answered, scoring ${score} out of 10` : "Answered",
+      at: r.submittedAt,
+    });
+  }
   return events.sort((a, b) => b.at.getTime() - a.at.getTime());
 }

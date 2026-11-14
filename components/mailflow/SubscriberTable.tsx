@@ -7,6 +7,7 @@ import { filterSubscribers, type Subscriber } from "@/lib/campaigns/subscribers"
 import type { ActivityEvent } from "@/lib/campaigns/subscribers";
 import type { EngagementProfile, SendWindow } from "@/lib/campaigns/engagement";
 import { EngagementPanel } from "./EngagementPanel";
+import { contactHistoryAction } from "@/app/(mailflow)/marketing/subscribers/actions";
 import { Eyebrow } from "./MailflowPage";
 
 /**
@@ -392,6 +393,34 @@ function DetailPanel({
   onClose: () => void;
 }) {
   const [tagPending, startTagTransition] = React.useTransition();
+
+  /* Campaign events arrive with the page. Sequence emails, enquiries
+     and survey answers are fetched for this one contact when the panel
+     opens, so the list itself stays quick. Keyed by email so a slow
+     answer for the previous contact can't land on this one. */
+  const [more, setMore] = React.useState<{ email: string; events: ActivityEvent[] } | null>(null);
+  React.useEffect(() => {
+    let live = true;
+    contactHistoryAction(subscriber.email).then((r) => {
+      if (live && r.ok) {
+        setMore({
+          email: subscriber.email,
+          events: r.events.map((e) => ({ ...e, kind: e.kind as ActivityEvent["kind"], at: new Date(e.at) })),
+        });
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [subscriber.email]);
+  const timeline = React.useMemo(
+    () =>
+      [...events, ...(more?.email === subscriber.email ? more.events : [])].sort(
+        (a, b) => b.at.getTime() - a.at.getTime(),
+      ),
+    [events, more, subscriber.email],
+  );
+
   const money = (v: number | null) =>
     v === null ? "—" : `$${Math.round(v).toLocaleString("en-AU")}`;
 
@@ -515,13 +544,13 @@ function DetailPanel({
       {profile && <EngagementPanel profile={profile} sendWindow={sendWindow} />}
 
       <Eyebrow className="mb-2 mt-4">Activity</Eyebrow>
-      {events.length === 0 ? (
+      {timeline.length === 0 ? (
         <p className="text-[12px] text-ink-mute">
-          No campaign activity yet.
+          No activity yet: no campaigns, sequence emails, enquiries or survey answers.
         </p>
       ) : (
         <ul className="space-y-0">
-          {events.map((e, i) => (
+          {timeline.map((e, i) => (
             <li key={`${e.kind}-${e.at.toISOString()}-${i}`} className="flex gap-2.5">
               <span className="flex w-3 shrink-0 flex-col items-center">
                 <span
@@ -531,7 +560,7 @@ function DetailPanel({
                     boxShadow: `0 0 0 3px ${HALO_COLOUR[e.kind]}`,
                   }}
                 />
-                {i < events.length - 1 && (
+                {i < timeline.length - 1 && (
                   <span className="mt-1 w-px flex-1 bg-hairline" />
                 )}
               </span>
@@ -566,6 +595,8 @@ const DOT_COLOUR: Record<ActivityEvent["kind"], string> = {
   sent: "#c9cbd4",
   unsubscribed: "var(--color-danger)",
   added: "#c9cbd4",
+  enquiry: "var(--color-series-3)",
+  survey: "var(--color-ok)",
 };
 
 const HALO_COLOUR: Record<ActivityEvent["kind"], string> = {
@@ -574,6 +605,8 @@ const HALO_COLOUR: Record<ActivityEvent["kind"], string> = {
   sent: "#f1f1f4",
   unsubscribed: "#fbf0ef",
   added: "#f1f1f4",
+  enquiry: "#fbf3e2",
+  survey: "#eaf6ef",
 };
 
 function Pair({ label, value }: { label: string; value: string }) {

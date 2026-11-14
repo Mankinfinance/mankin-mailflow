@@ -484,6 +484,8 @@ export interface AutomationRepo {
   recordSend(row: NewAutomationSend): Promise<AutomationSendRow>;
   /** The most recent send for a run — what a condition judges. */
   latestSendForRun(runId: string): Promise<AutomationSendRow | null>;
+  /** Every sequence email to one address, newest first (contact timeline). */
+  sendsForEmail(email: string, limit?: number): Promise<AutomationSendRow[]>;
   findSend(
     automationId: string,
     email: string,
@@ -515,6 +517,8 @@ export interface FormRepo {
     formId: string,
     limit?: number,
   ): Promise<FormSubmissionRow[]>;
+  /** Every enquiry from one address, newest first (contact timeline). */
+  submissionsForEmail(email: string, limit?: number): Promise<FormSubmissionRow[]>;
   /** Submission counts per form, for the list. */
   submissionCounts(): Promise<Record<string, number>>;
   /**
@@ -615,6 +619,8 @@ export interface SurveyRepo {
     surveyId: string,
     limit?: number,
   ): Promise<SurveyResponseRow[]>;
+  /** Every survey answer from one address, newest first (contact timeline). */
+  responsesForEmail(email: string, limit?: number): Promise<SurveyResponseRow[]>;
   /** Whether this address has already answered, for the response page. */
   findResponse(
     surveyId: string,
@@ -2377,6 +2383,20 @@ function realRepos(): RepoBundle {
           return inserted;
         }
       },
+      async sendsForEmail(email, limit = 200) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(automationSends)
+            .where(eq(automationSends.email, email.toLowerCase()))
+            .orderBy(sql`${automationSends.sentAt} desc nulls last`)
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
+      },
       async latestSendForRun(runId) {
         const db = getDb();
         try {
@@ -2563,6 +2583,20 @@ function realRepos(): RepoBundle {
           await db.update(formSubmissions).set(patch).where(eq(formSubmissions.id, id));
         } catch (err) {
           if (!isMissingRelation(err)) throw err;
+        }
+      },
+      async submissionsForEmail(email, limit = 200) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(formSubmissions)
+            .where(eq(formSubmissions.email, email.toLowerCase()))
+            .orderBy(desc(formSubmissions.submittedAt))
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
         }
       },
       async listSubmissions(formId, limit = 200) {
@@ -3107,6 +3141,20 @@ function realRepos(): RepoBundle {
               submittedAt: row.submittedAt ?? new Date(),
             },
           });
+      },
+      async responsesForEmail(email, limit = 200) {
+        const db = getDb();
+        try {
+          return await db
+            .select()
+            .from(surveyResponses)
+            .where(eq(surveyResponses.email, email.toLowerCase()))
+            .orderBy(desc(surveyResponses.submittedAt))
+            .limit(limit);
+        } catch (err) {
+          if (!isMissingRelation(err)) throw err;
+          return [];
+        }
       },
       async listResponses(surveyId, limit = 2000) {
         const db = getDb();
@@ -4164,6 +4212,12 @@ function mockRepos(): RepoBundle {
         mockAutomationSendStore.set(id, send);
         return send;
       },
+      async sendsForEmail(email, limit = 200) {
+        return Array.from(mockAutomationSendStore.values())
+          .filter((r) => r.email === email.toLowerCase())
+          .sort((a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0))
+          .slice(0, limit);
+      },
       async latestSendForRun(runId) {
         return (
           Array.from(mockAutomationSendStore.values())
@@ -4279,6 +4333,12 @@ function mockRepos(): RepoBundle {
         const existing = mockSubmissionStore.get(id);
         if (!existing) return;
         mockSubmissionStore.set(id, { ...existing, ...patch } as FormSubmissionRow);
+      },
+      async submissionsForEmail(email, limit = 200) {
+        return Array.from(mockSubmissionStore.values())
+          .filter((sub) => sub.email === email.toLowerCase())
+          .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime())
+          .slice(0, limit);
       },
       async listSubmissions(formId, limit = 200) {
         return Array.from(mockSubmissionStore.values())
@@ -4646,6 +4706,12 @@ function mockRepos(): RepoBundle {
           sourceKind: row.sourceKind ?? null,
           sourceId: row.sourceId ?? null,
         } as SurveyResponseRow);
+      },
+      async responsesForEmail(email, limit = 200) {
+        return Array.from(mockSurveyResponseStore.values())
+          .filter((r) => r.email === email.toLowerCase())
+          .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime())
+          .slice(0, limit);
       },
       async listResponses(surveyId, limit = 2000) {
         return Array.from(mockSurveyResponseStore.values())

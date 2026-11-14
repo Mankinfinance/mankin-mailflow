@@ -1172,6 +1172,8 @@ export const automationSends = pgTable(
   (t) => [
     index("automation_sends_run_idx").on(t.runId),
     index("automation_sends_automation_node_idx").on(t.automationId, t.nodeId),
+    /* One contact's sequence history, for their timeline. */
+    index("automation_sends_email_idx").on(t.email),
   ],
 );
 
@@ -1273,6 +1275,8 @@ export const formSubmissions = pgTable(
     index("form_submissions_form_idx").on(t.formId),
     index("form_submissions_page_idx").on(t.pageId),
     index("form_submissions_submitted_at_idx").on(t.submittedAt),
+    /* One contact's enquiries, for their timeline. */
+    index("form_submissions_email_idx").on(t.email),
   ],
 );
 

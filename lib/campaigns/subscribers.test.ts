@@ -208,3 +208,26 @@ describe("buildActivity", () => {
     expect(events.map((e) => e.kind)).toEqual(["added"]);
   });
 });
+
+describe("buildHistoryEvents", () => {
+  it("puts sequence emails, enquiries and survey answers on one timeline, newest first", async () => {
+    const { buildHistoryEvents } = await import("./subscribers");
+    const d = (s: string) => new Date(s);
+    const events = buildHistoryEvents({
+      sends: [{ automationId: "a1", sentAt: d("2026-10-01"), openedAt: d("2026-10-02"), clickedAt: null, unsubscribedAt: null }],
+      automationNames: new Map([["a1", "Annual review"]]),
+      submissions: [{ formId: "f1", submittedAt: d("2026-09-01"), dealId: "deal-1" }],
+      formNames: new Map([["f1", "Refinance health check"]]),
+      responses: [{ surveyId: "s1", submittedAt: d("2026-11-01"), answers: { q1: 9, q2: "Great" } }],
+      surveyNames: new Map([["s1", "After settlement"]]),
+    });
+    expect(events.map((e) => [e.kind, e.label])).toEqual([
+      ["survey", "Survey: After settlement"],
+      ["opened", "Sequence: Annual review"],
+      ["sent", "Sequence: Annual review"],
+      ["enquiry", "Form: Refinance health check"],
+    ]);
+    expect(events[0].detail).toBe("Answered, scoring 9 out of 10");
+    expect(events[3].detail).toContain("now a deal");
+  });
+});

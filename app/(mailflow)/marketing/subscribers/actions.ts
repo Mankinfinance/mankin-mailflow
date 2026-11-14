@@ -5,6 +5,7 @@ import { currentBroker } from "@/lib/auth/current-broker";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { repos } from "@/lib/db/repos";
 import { auditLog } from "@/lib/audit";
+import { buildHistoryEvents } from "@/lib/campaigns/subscribers";
 
 /**
  * Tagging.
@@ -84,4 +85,37 @@ export async function untagContactsAction(
     meta: { tag, requested: targets.length, removed },
   });
   revalidatePath("/marketing/subscribers");
+}
+
+/**
+ * One contact's sequence emails, enquiries and survey answers, for
+ * their panel. Dates go over the wire as ISO strings.
+ */
+export async function contactHistoryAction(
+  email: string,
+): Promise<{ ok: true; events: Array<{ kind: string; label: string; detail: string; at: string }> } | { ok: false; error: string }> {
+  const broker = await currentBroker();
+  if (!(await canAccessAdmin(broker.id))) {
+    return { ok: false, error: "Admin access required." };
+  }
+  const address = String(email ?? "").trim().toLowerCase().slice(0, 320);
+  if (!address.includes("@")) return { ok: false, error: "That isn't an email address." };
+
+  const [sends, submissions, responses, automations, forms, surveys] = await Promise.all([
+    repos().automation.sendsForEmail(address),
+    repos().form.submissionsForEmail(address),
+    repos().survey.responsesForEmail(address),
+    repos().automation.list(),
+    repos().form.list(),
+    repos().survey.list(),
+  ]);
+  const events = buildHistoryEvents({
+    sends,
+    automationNames: new Map(automations.map((a) => [a.id, a.name])),
+    submissions,
+    formNames: new Map(forms.map((f) => [f.id, f.name])),
+    responses,
+    surveyNames: new Map(surveys.map((s) => [s.id, s.name])),
+  });
+  return { ok: true, events: events.map((e) => ({ ...e, at: e.at.toISOString() })) };
 }
